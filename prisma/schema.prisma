@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MASTER_ADMIN
+  COUNTER_ADMIN
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  username     String    @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  receipts     Receipt[]
+}
+
+model Rate {
+  id        String   @id @default(cuid())
+  itemKey   String   @unique
+  label     String
+  rate      Int
+  updatedAt DateTime @updatedAt
+}
+
+model Receipt {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique
+  heading       String?
+  adminId       String
+  admin         User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  timestamp     DateTime @default(now())
+  andarCode     String?
+  andarRate     Int?
+  andarQty      Int      @default(0)
+  andarAmount   Int      @default(0)
+  baharCode     String?
+  baharRate     Int?
+  baharQty      Int      @default(0)
+  baharAmount   Int      @default(0)
+  resultCode    String?
+  resultRate    Int?
+  resultQty     Int      @default(0)
+  resultAmount  Int      @default(0)
+  totalAmount   Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([adminId, timestamp])
+  @@index([timestamp])
+}

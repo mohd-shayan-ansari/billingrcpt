@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Billing Lottery
 
-## Getting Started
+Thermal receipt generator with role-based access for one Master Admin and multiple Counter Admins.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- JWT login with secure httpOnly cookie sessions
+- Master Admin management for counter admins
+- Central rate editing for Andar, Bahar, and Result
+- Receipt creation with selected codes, editable heading, and live thermal preview
+- Print-optimized 2-inch layout and PDF download
+- Receipt history filtered by role
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Install dependencies.
+2. Ensure `.env` exists. It already includes a local SQLite database path and JWT secret.
+3. Run `npm run prisma:generate`.
+4. Run `npm run db:push` to create the SQLite database.
+5. Run `npm run db:seed` to create the master admin and default rates.
+6. Start the app with `npm run dev`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Default Master Admin
 
-## Learn More
+- Username: `admin@billing.local`
+- Password: `Admin@1234`
 
-To learn more about Next.js, take a look at the following resources:
+## Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- The app currently uses SQLite for a self-contained deployment path. Switching to PostgreSQL only requires changing `DATABASE_URL` and the Prisma datasource provider.
+- The print output is optimized for a 58mm thermal receipt width.
