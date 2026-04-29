@@ -344,6 +344,41 @@ export function AppShell() {
       return;
     }
 
+    // Generate PDF before clearing entries
+    try {
+      const savedPreview = buildReceiptLines({
+        receiptNumber: data.receipt.receiptNumber,
+        heading: data.receipt.heading ?? "",
+        timestamp: new Date(data.receipt.timestamp),
+        entries: entries
+          .map((entry) => {
+            if (!entry.code || !entry.qty) return null;
+            const rate = rates[entry.itemKey];
+            return {
+              itemKey: entry.itemKey,
+              code: entry.code,
+              qty: entry.qty,
+              rate,
+              amount: rate * entry.qty,
+            };
+          })
+          .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+      });
+
+      const pdfHeight = 8 + savedPreview.lines.length * 5 + 5;
+      const pdf = new jsPDF({ unit: "mm", format: [58, pdfHeight] });
+      pdf.setFont("courier", "normal");
+      pdf.setFontSize(9);
+      let y = 8;
+      for (const line of savedPreview.lines) {
+        pdf.text(line.slice(0, 28), 4, y);
+        y += 5;
+      }
+      pdf.save(`${data.receipt.receiptNumber}.pdf`);
+    } catch (e) {
+      console.error("PDF download failed", e);
+    }
+
     setLastReceipt(data.receipt);
     setEntries([newEntry("andar")]);
     setMessage(`Receipt ${data.receipt.receiptNumber} created`);
@@ -485,9 +520,12 @@ export function AppShell() {
         <head>
           <title>${preview.lines[0]}</title>
           <style>
-            @page { size: 58mm auto; margin: 0; }
+            @media print {
+              body { width: 58mm; margin: 0; }
+              @page { size: 58mm auto; margin: 0; }
+            }
             body { margin: 0; font-family: Courier New, monospace; }
-            .ticket { width: 58mm; padding: 4mm 3mm; white-space: pre-wrap; font-size: 12px; line-height: 1.35; }
+            .ticket { width: 58mm; padding: 2mm 2mm 5mm 2mm; white-space: pre-wrap; font-size: 11px; line-height: 1.25; }
           </style>
         </head>
         <body>
@@ -507,21 +545,6 @@ export function AppShell() {
       </html>
     `);
     printWindow.document.close();
-  }
-
-  async function downloadPdf() {
-    const preview = getPreview();
-    const pdf = new jsPDF({ unit: "mm", format: [58, 120] });
-    pdf.setFont("courier", "normal");
-    pdf.setFontSize(9);
-
-    let y = 8;
-    for (const line of preview.lines) {
-      pdf.text(line.slice(0, 28), 4, y);
-      y += 5;
-    }
-
-    pdf.save(`${lastReceipt?.receiptNumber ?? "receipt"}.pdf`);
   }
 
   async function saveRates() {
@@ -901,9 +924,8 @@ export function AppShell() {
                       <span className="md:hidden">Qty</span>
                       <input
                         type="number"
-                        min={1}
-                        value={entry.qty}
-                        onChange={(event) => updateEntry(entry.id, { qty: Math.max(1, Number(event.target.value) || 1) })}
+                        value={entry.qty || ""}
+                        onChange={(event) => updateEntry(entry.id, { qty: event.target.value === "" ? 0 : Number(event.target.value) })}
                         className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white outline-none transition focus:border-amber-300"
                       />
                     </label>
@@ -935,8 +957,7 @@ export function AppShell() {
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <button onClick={saveAndPrint} className="rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Save and Print</button>
-              <button onClick={downloadPdf} className="rounded-2xl border border-white/15 bg-slate-950/80 px-5 py-3 font-semibold text-white transition hover:border-amber-300 hover:text-amber-100">Download PDF</button>
+              <button onClick={saveAndPrint} className="w-full rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Save</button>
             </div>
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-300">

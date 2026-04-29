@@ -41,12 +41,7 @@ export function buildReceiptLines(payload: {
   lines.push(centerLine(`Time: ${formatReceiptTime(payload.timestamp)}`, width));
   lines.push("-".repeat(width));
 
-  const noWidth = 9;
-  const qtyWidth = 5;
-  const rateWidth = 7;
-  const totalWidth = 7;
-
-  lines.push(formatColumns("No.", "Qty", "Rate", "Total", { noWidth, qtyWidth, rateWidth, totalWidth }));
+  lines.push("No.    Qty    Rate     Total");
 
   let total = 0;
   const codePrefix = {
@@ -62,17 +57,12 @@ export function buildReceiptLines(payload: {
 
     total += entry.amount;
     lines.push(
-      formatColumns(`${codePrefix[entry.itemKey]}-${entry.code}`, String(entry.qty), entry.rate.toFixed(2), String(entry.amount), {
-        noWidth,
-        qtyWidth,
-        rateWidth,
-        totalWidth,
-      }),
+      formatColumns(`${codePrefix[entry.itemKey]}-${entry.code}`, String(entry.qty), entry.rate.toFixed(2), String(entry.amount))
     );
   }
 
   lines.push("-".repeat(width));
-  lines.push(centerLine(`Final Total: ${total}`, width));
+  lines.push(`Final Total: ${total}`);
 
   return { lines, total };
 }
@@ -112,19 +102,28 @@ function formatReceiptTime(value: Date) {
   return `${String(hours).padStart(2, "0")}:${minute}:${second} ${ampm}`;
 }
 
-function formatColumns(
-  no: string,
-  qty: string,
-  rate: string,
-  total: string,
-  widths: { noWidth: number; qtyWidth: number; rateWidth: number; totalWidth: number },
-) {
+function formatColumns(no: string, qty: string, rate: string, total: string) {
+  const w1 = 5;
+  const w2 = 5;
+  const w3 = 8;
+  const w4 = 10;
+  
   return [
-    centerLine(no, widths.noWidth),
-    centerLine(qty, widths.qtyWidth),
-    centerLine(rate, widths.rateWidth),
-    centerLine(total, widths.totalWidth),
+    leftAlign(no, w1),
+    rightAlign(qty, w2),
+    rightAlign(rate, w3),
+    rightAlign(total, w4),
   ].join("");
+}
+
+function leftAlign(text: string, width: number) {
+  const trimmed = text.slice(0, width);
+  return trimmed.padEnd(width, " ");
+}
+
+function rightAlign(text: string, width: number) {
+  const trimmed = text.slice(0, width);
+  return trimmed.padStart(width, " ");
 }
 
 function centerLine(text: string, width: number) {
