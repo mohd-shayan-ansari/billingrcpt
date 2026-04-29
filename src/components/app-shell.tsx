@@ -94,9 +94,13 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
+  const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
+  const [salesData, setSalesData] = useState<Array<{ heading: string; total: number }>>([]);
+  const [grandTotal, setGrandTotal] = useState(0);
+  const [isSalesLoading, setIsSalesLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -115,6 +119,30 @@ export function AppShell() {
     })();
     return () => { active = false; };
   }, [heading, lastReceipt]);
+
+  useEffect(() => {
+    let active = true;
+    if (currentPage === "sales" && session?.role === "MASTER_ADMIN") {
+      setIsSalesLoading(true);
+      void (async () => {
+        try {
+          const resp = await fetch(`/api/sales?date=${salesDate}`, { cache: "no-store" });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (active) {
+              setSalesData(data.salesData || []);
+              setGrandTotal(data.grandTotal || 0);
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          if (active) setIsSalesLoading(false);
+        }
+      })();
+    }
+    return () => { active = false; };
+  }, [currentPage, salesDate, session]);
 
   useEffect(() => {
     void (async () => {
@@ -151,7 +179,7 @@ export function AppShell() {
         // Set fixed counter heading based on user role
         if (data.user.role === "COUNTER_ADMIN") {
           const counterNum = data.user.name.match(/\d+/)?.[0];
-          setHeading(counterNum ? `Counter ${counterNum}` : "Counter 01");
+          setHeading(counterNum ? `Counter ${counterNum.padStart(2, "0")}` : "Counter 01");
         }
 
         if (usersResponse.ok) {
@@ -223,7 +251,7 @@ export function AppShell() {
     // Set fixed counter heading for counter admins
     if (data.user.role === "COUNTER_ADMIN") {
       const counterNum = data.user.name.match(/\d+/)?.[0];
-      setHeading(counterNum ? `Counter ${counterNum}` : "Counter 01");
+      setHeading(counterNum ? `Counter ${counterNum.padStart(2, "0")}` : "Counter 01");
     }
     
     await Promise.all([refreshRates(), refreshReceipts(), refreshUsers()]);
@@ -658,6 +686,7 @@ export function AppShell() {
               {menuOpen && (
                 <div className="absolute right-0 mt-2 rounded-xl border border-white/10 bg-slate-950/90 shadow-lg z-50">
                   <button onClick={() => { setCurrentPage("rates"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 rounded-t-xl text-sm">Change Rates</button>
+                  <button onClick={() => { setCurrentPage("sales"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 text-sm">Sales</button>
                   <button onClick={() => { setCurrentPage("admins"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 text-sm">Counter Admins</button>
                   <button onClick={() => { setCurrentPage("update-password"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 rounded-b-xl text-sm">Update Password</button>
                 </div>
@@ -755,6 +784,49 @@ export function AppShell() {
         </div>
       )}
 
+      {currentPage === "sales" && session.role === "MASTER_ADMIN" && (
+        <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 max-w-4xl mx-auto shadow-2xl shadow-black/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">Sales Report</h2>
+              <p className="text-sm text-slate-400">View sales per counter for a specific date.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label htmlFor="sales-date" className="text-sm text-slate-300 font-medium">Date:</label>
+              <input
+                id="sales-date"
+                type="date"
+                value={salesDate}
+                onChange={(e) => setSalesDate(e.target.value)}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-white outline-none focus:border-amber-300/60"
+              />
+            </div>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {isSalesLoading ? (
+              <div className="col-span-full py-8 text-center text-slate-400">Loading sales data...</div>
+            ) : salesData.length === 0 ? (
+              <div className="col-span-full py-8 text-center text-slate-400 rounded-2xl border border-white/5 bg-white/5">No sales recorded for this date.</div>
+            ) : (
+              salesData.map((sale, index) => (
+                <div key={index} className="flex items-center justify-between p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
+                  <span className="font-medium text-white">{sale.heading}</span>
+                  <span className="font-semibold text-amber-200">{formatCurrency(sale.total)}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          {!isSalesLoading && salesData.length > 0 && (
+            <div className="mt-8 flex items-center justify-between p-5 rounded-2xl bg-amber-300/10 border border-amber-300/20">
+              <span className="text-xl font-semibold text-amber-100">Grand Total</span>
+              <span className="text-2xl font-bold text-amber-300">{formatCurrency(grandTotal)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {currentPage === "dashboard" && (
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <section className="space-y-6">
@@ -776,9 +848,10 @@ export function AppShell() {
                     onChange={(event) => setHeading(event.target.value)}
                     className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300"
                   >
-                    {Array.from({ length: 15 }).map((_, i) => (
-                      <option key={i + 1} value={`Counter ${i + 1}`}>Counter {i + 1}</option>
-                    ))}
+                    {Array.from({ length: 15 }).map((_, i) => {
+                      const num = String(i + 1).padStart(2, "0");
+                      return <option key={num} value={`Counter ${num}`}>Counter {num}</option>;
+                    })}
                   </select>
                 ) : (
                   <input value={heading} disabled className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none disabled:opacity-60 disabled:cursor-not-allowed" />
