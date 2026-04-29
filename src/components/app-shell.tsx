@@ -831,7 +831,7 @@ export function AppShell() {
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <button onClick={saveAndPrint} className="rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Print</button>
+              <button onClick={saveAndPrint} className="rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Save and Print</button>
               <button onClick={downloadPdf} className="rounded-2xl border border-white/15 bg-slate-950/80 px-5 py-3 font-semibold text-white transition hover:border-amber-300 hover:text-amber-100">Download PDF</button>
             </div>
 

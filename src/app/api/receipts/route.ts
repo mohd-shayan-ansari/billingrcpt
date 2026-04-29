@@ -29,22 +29,30 @@ export async function GET(request: Request) {
   const like = `%${search}%`;
   let whereClause = Prisma.empty;
 
-  if (session.role !== Role.MASTER_ADMIN && search) {
-    whereClause = Prisma.sql`WHERE r.adminId = ${session.id} AND (
-      r.receiptNumber LIKE ${like}
-      OR COALESCE(r.heading, '') LIKE ${like}
-      OR a.name LIKE ${like}
-      OR a.username LIKE ${like}
-    )`;
-  } else if (session.role !== Role.MASTER_ADMIN) {
-    whereClause = Prisma.sql`WHERE r.adminId = ${session.id}`;
-  } else if (search) {
-    whereClause = Prisma.sql`WHERE (
-      r.receiptNumber LIKE ${like}
-      OR COALESCE(r.heading, '') LIKE ${like}
-      OR a.name LIKE ${like}
-      OR a.username LIKE ${like}
-    )`;
+  // Build WHERE clause based on role and search filter
+  if (session.role === Role.MASTER_ADMIN) {
+    // Master admin sees all receipts; apply search filter only if provided
+    if (search) {
+      whereClause = Prisma.sql`WHERE (
+        r.receiptNumber LIKE ${like}
+        OR COALESCE(r.heading, '') LIKE ${like}
+        OR a.name LIKE ${like}
+        OR a.username LIKE ${like}
+      )`;
+    }
+    // else: no WHERE clause, master admin sees all receipts
+  } else {
+    // Counter admin sees only their own receipts
+    if (search) {
+      whereClause = Prisma.sql`WHERE r.adminId = ${session.id} AND (
+        r.receiptNumber LIKE ${like}
+        OR COALESCE(r.heading, '') LIKE ${like}
+        OR a.name LIKE ${like}
+        OR a.username LIKE ${like}
+      )`;
+    } else {
+      whereClause = Prisma.sql`WHERE r.adminId = ${session.id}`;
+    }
   }
 
   const receipts = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
