@@ -1,0 +1,1220 @@
+Attached Element Context from Integrated Browser
+
+Element: p.text-xs.uppercase.tracking-[0.35em].text-amber-200
+
+URL: http://localhost:3000/
+
+HTML Path:
+main.no-print.mx-auto.w-full.max-w-7xl.px-4.py-6.md:py-10 > div.mb-6.flex.flex-col.gap-4.rounded-[2rem].border.border-white/10.bg-white/5.p-5.backdrop-blur.md:flex-row.md:items-center.md:justify-between > div > p.text-xs.uppercase.tracking-[0.35em].text-amber-200
+
+Attributes:
+- class: text-xs uppercase tracking-[0.35em] text-amber-200
+
+Dimensions:
+- top: 45px
+- left: 37px
+- width: 400px
+- height: 16px
+
+Outer HTML:
+```html
+<p class="text-xs uppercase tracking-[0.35em] text-amber-200">Billing Lottery</p>
+```
+
+Computed Styles:
+- margin: 0px 0px 0px 0px
+- padding: 0px 0px 0px 0px
+- --background: #020617
+- --color-amber-100: lab(95.916% -1.2165 23.111)
+- --color-amber-200: lab(91.7203% -.505269 49.9084)
+- --color-amber-300: lab(86.4156% 6.13147 78.3961)
+- --color-black: #000
+- --color-blue-500: lab(54.1736% 13.3368 -74.6839)
+- --color-blue-600: lab(44.0605% 29.0279 -86.0352)
+- --color-emerald-300: lab(83.9203% -48.7124 13.8849)
+- --color-emerald-400: lab(75.0771% -60.7313 19.4146)
+- --color-emerald-950: lab(15.0582% -17.9507 2.38369)
+- --color-red-100: lab(92.243% 10.2865 3.83865)
+- --color-red-300: lab(76.5514% 36.4219 15.5335)
+- --color-red-400: lab(63.7053% 60.7449 31.3109)
+- --color-slate-100: lab(96.286% -.852466 -2.46847)
+- --color-slate-300: lab(84.7652% -1.94535 -7.93337)
+- --color-slate-400: lab(65.5349% -2.25151 -14.5072)
+- --color-slate-500: lab(48.0876% -2.03595 -16.5814)
+- --color-slate-900: lab(7.78673% 1.82346 -15.0537)
+- --color-slate-950: lab(1.76974% 1.32743 -9.28855)
+- --color-white: #fff
+- --container-2xl: 42rem
+- --container-4xl: 56rem
+- --container-6xl: 72rem
+- --container-7xl: 80rem
+- --container-md: 28rem
+- --container-xl: 36rem
+- --default-font-family: "Geist", "Geist Fallback"
+- --default-mono-font-family: "Geist Mono", "Geist Mono Fallback"
+- --default-transition-duration: .15s
+- --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1)
+- --font-geist-mono: "Geist Mono", "Geist Mono Fallback"
+- --font-geist-sans: "Geist", "Geist Fallback"
+- --font-weight-medium: 500
+- --font-weight-semibold: 600
+- --foreground: #e2e8f0
+- --radius-2xl: 1rem
+- --radius-3xl: 1.5rem
+- --radius-lg: .5rem
+- --radius-xl: .75rem
+- --spacing: .25rem
+- --text-2xl: 1.5rem
+- --text-2xl--line-height: calc(2 / 1.5)
+- --text-4xl: 2.25rem
+- --text-4xl--line-height: calc(2.5 / 2.25)
+- --text-6xl: 3.75rem
+- --text-6xl--line-height: 1
+- --text-base: 1rem
+- --text-base--line-height: calc(1.5 / 1)
+- --text-lg: 1.125rem
+- --text-lg--line-height: calc(1.75 / 1.125)
+- --text-sm: .875rem
+- --text-sm--line-height: calc(1.25 / .875)
+- --text-xs: .75rem
+- --text-xs--line-height: calc(1 / .75)
+- --tracking-tight: -.025em
+- --tw-border-style: solid
+- --tw-inset-ring-shadow: 0 0 #0000
+- --tw-inset-shadow: 0 0 #0000
+- --tw-inset-shadow-alpha: 100%
+- --tw-ring-offset-color: #fff
+- --tw-ring-offset-shadow: 0 0 #0000
+- --tw-ring-offset-width: 0px
+- --tw-ring-shadow: 0 0 #0000
+- --tw-shadow: 0 0 #0000
+- --tw-shadow-alpha: 100%
+- --tw-space-y-reverse: 0
+- --tw-tracking: .35em
+- -electron-corner-smoothing: none
+- -webkit-border-horizontal-spacing: 0px
+- -webkit-border-image: none
+- -webkit-border-vertical-spacing: 0px
+- -webkit-box-align: stretch
+- -webkit-box-decoration-break: slice
+- -webkit-box-direction: normal
+- -webkit-box-flex: 0
+- -webkit-box-ordinal-group: 1
+- -webkit-box-orient: horizontal
+- -webkit-box-pack: start
+- -webkit-box-reflect: none
+- -webkit-font-smoothing: antialiased
+- -webkit-line-break: auto
+- -webkit-line-clamp: none
+- -webkit-locale: "en"
+- -webkit-mask-box-image-outset: 0
+- -webkit-mask-box-image-repeat: stretch
+- -webkit-mask-box-image-slice: 0 fill
+- -webkit-mask-box-image-source: none
+- -webkit-mask-box-image-width: auto
+- -webkit-mask-position-x: 0%
+- -webkit-mask-position-y: 0%
+- -webkit-perspective-origin-x: 
+- -webkit-perspective-origin-y: 
+- -webkit-rtl-ordering: logical
+- -webkit-ruby-position: before
+- -webkit-tap-highlight-color: rgba(0, 0, 0, 0)
+- -webkit-text-combine: none
+- -webkit-text-decorations-in-effect: none
+- -webkit-text-fill-color: lab(91.7203 -0.505269 49.9084)
+- -webkit-text-orientation: vertical-right
+- -webkit-text-security: none
+- -webkit-text-stroke-color: lab(91.7203 -0.505269 49.9084)
+- -webkit-text-stroke-width: 0px
+- -webkit-transform-origin-x: 
+- -webkit-transform-origin-y: 
+- -webkit-transform-origin-z: 
+- -webkit-user-drag: auto
+- -webkit-user-modify: read-only
+- -webkit-writing-mode: horizontal-tb
+- accent-color: auto
+- align-content: normal
+- align-items: normal
+- align-self: auto
+- alignment-baseline: auto
+- all: 
+- anchor-name: none
+- anchor-scope: none
+- animation-composition: replace
+- animation-delay: 0s
+- animation-direction: normal
+- animation-duration: 0s
+- animation-fill-mode: none
+- animation-iteration-count: 1
+- animation-name: none
+- animation-play-state: running
+- animation-range-end: normal
+- animation-range-start: normal
+- animation-timeline: auto
+- animation-timing-function: ease
+- app-region: none
+- appearance: none
+- aspect-ratio: auto
+- backdrop-filter: none
+- backface-visibility: visible
+- background-attachment: scroll
+- background-blend-mode: normal
+- background-clip: border-box
+- background-color: rgba(0, 0, 0, 0)
+- background-image: none
+- background-origin: padding-box
+- background-position-x: 0%
+- background-position-y: 0%
+- background-repeat: repeat
+- background-size: auto
+- baseline-shift: 0px
+- baseline-source: auto
+- block-size: 16px
+- border-block-end-color: lab(91.7203 -0.505269 49.9084)
+- border-block-end-style: solid
+- border-block-end-width: 0px
+- border-block-start-color: lab(91.7203 -0.505269 49.9084)
+- border-block-start-style: solid
+- border-block-start-width: 0px
+- border-bottom-color: lab(91.7203 -0.505269 49.9084)
+- border-bottom-left-radius: 0px
+- border-bottom-right-radius: 0px
+- border-bottom-style: solid
+- border-bottom-width: 0px
+- border-collapse: separate
+- border-end-end-radius: 0px
+- border-end-start-radius: 0px
+- border-image-outset: 0
+- border-image-repeat: stretch
+- border-image-slice: 100%
+- border-image-source: none
+- border-image-width: 1
+- border-inline-end-color: lab(91.7203 -0.505269 49.9084)
+- border-inline-end-style: solid
+- border-inline-end-width: 0px
+- border-inline-start-color: lab(91.7203 -0.505269 49.9084)
+- border-inline-start-style: solid
+- border-inline-start-width: 0px
+- border-left-color: lab(91.7203 -0.505269 49.9084)
+- border-left-style: solid
+- border-left-width: 0px
+- border-right-color: lab(91.7203 -0.505269 49.9084)
+- border-right-style: solid
+- border-right-width: 0px
+- border-start-end-radius: 0px
+- border-start-start-radius: 0px
+- border-top-color: lab(91.7203 -0.505269 49.9084)
+- border-top-left-radius: 0px
+- border-top-right-radius: 0px
+- border-top-style: solid
+- border-top-width: 0px
+- bottom: auto
+- box-decoration-break: slice
+- box-shadow: none
+- box-sizing: border-box
+- break-after: auto
+- break-before: auto
+- break-inside: auto
+- buffered-rendering: auto
+- caption-side: top
+- caret-animation: auto
+- caret-color: lab(91.7203 -0.505269 49.9084)
+- clear: none
+- clip: auto
+- clip-path: none
+- clip-rule: nonzero
+- color: lab(91.7203 -0.505269 49.9084)
+- color-interpolation: srgb
+- color-interpolation-filters: linearrgb
+- color-rendering: auto
+- color-scheme: normal
+- column-count: auto
+- column-fill: balance
+- column-gap: normal
+- column-rule-color: lab(91.7203 -0.505269 49.9084)
+- column-rule-style: none
+- column-rule-width: 0px
+- column-span: none
+- column-width: auto
+- contain: none
+- contain-intrinsic-block-size: none
+- contain-intrinsic-height: none
+- contain-intrinsic-inline-size: none
+- contain-intrinsic-width: none
+- container-name: none
+- container-type: normal
+- content: normal
+- content-visibility: visible
+- corner-bottom-left-shape: round
+- corner-bottom-right-shape: round
+- corner-end-end-shape: round
+- corner-end-start-shape: round
+- corner-start-end-shape: round
+- corner-start-start-shape: round
+- corner-top-left-shape: round
+- corner-top-right-shape: round
+- counter-increment: none
+- counter-reset: none
+- counter-set: none
+- cursor: auto
+- cx: 0px
+- cy: 0px
+- d: none
+- direction: ltr
+- display: block
+- dominant-baseline: auto
+- dynamic-range-limit: no-limit
+- empty-cells: show
+- field-sizing: fixed
+- fill: rgb(0, 0, 0)
+- fill-opacity: 1
+- fill-rule: nonzero
+- filter: none
+- flex-basis: auto
+- flex-direction: row
+- flex-grow: 0
+- flex-shrink: 1
+- flex-wrap: nowrap
+- float: none
+- flood-color: rgb(0, 0, 0)
+- flood-opacity: 1
+- font-family: Geist, "Geist Fallback", Arial, Helvetica, sans-serif
+- font-feature-settings: normal
+- font-kerning: auto
+- font-optical-sizing: auto
+- font-palette: normal
+- font-size: 12px
+- font-size-adjust: none
+- font-stretch: 100%
+- font-style: normal
+- font-synthesis-small-caps: auto
+- font-synthesis-style: auto
+- font-synthesis-weight: auto
+- font-variant-alternates: normal
+- font-variant-caps: normal
+- font-variant-east-asian: normal
+- font-variant-emoji: normal
+- font-variant-ligatures: normal
+- font-variant-numeric: normal
+- font-variant-position: normal
+- font-variation-settings: normal
+- font-weight: 400
+- forced-color-adjust: auto
+- grid-auto-columns: auto
+- grid-auto-flow: row
+- grid-auto-rows: auto
+- grid-column-end: auto
+- grid-column-start: auto
+- grid-row-end: auto
+- grid-row-start: auto
+- grid-template-areas: none
+- grid-template-columns: none
+- grid-template-rows: none
+- height: 16px
+- hyphenate-character: auto
+- hyphenate-limit-chars: auto
+- hyphens: manual
+- image-orientation: from-image
+- image-rendering: auto
+- initial-letter: normal
+- inline-size: 400px
+- inset-block-end: auto
+- inset-block-start: auto
+- inset-inline-end: auto
+- inset-inline-start: auto
+- interactivity: auto
+- interest-delay-end: normal
+- interest-delay-start: normal
+- interpolate-size: numeric-only
+- isolation: auto
+- justify-content: normal
+- justify-items: normal
+- justify-self: auto
+- left: auto
+- letter-spacing: 4.2px
+- lighting-color: rgb(255, 255, 255)
+- line-break: auto
+- line-height: 16px
+- list-style-image: none
+- list-style-position: outside
+- list-style-type: disc
+- margin-block-end: 0px
+- margin-block-start: 0px
+- margin-inline-end: 0px
+- margin-inline-start: 0px
+- marker-end: none
+- marker-mid: none
+- marker-start: none
+- mask-clip: border-box
+- mask-composite: add
+- mask-image: none
+- mask-mode: match-source
+- mask-origin: border-box
+- mask-repeat: repeat
+- mask-size: auto
+- mask-type: luminance
+- math-depth: 0
+- math-shift: normal
+- math-style: normal
+- max-block-size: none
+- max-height: none
+- max-inline-size: none
+- max-width: none
+- min-block-size: 0px
+- min-height: 0px
+- min-inline-size: 0px
+- min-width: 0px
+- mix-blend-mode: normal
+- object-fit: fill
+- object-position: 50% 50%
+- object-view-box: none
+- offset-anchor: auto
+- offset-distance: 0px
+- offset-path: none
+- offset-position: normal
+- offset-rotate: auto 0deg
+- opacity: 1
+- order: 0
+- orphans: 2
+- outline-color: lab(91.7203 -0.505269 49.9084)
+- outline-offset: 0px
+- outline-style: none
+- outline-width: 0px
+- overflow-anchor: auto
+- overflow-block: visible
+- overflow-clip-margin: 0px
+- overflow-inline: visible
+- overflow-wrap: normal
+- overflow-x: visible
+- overflow-y: visible
+- overlay: none
+- overscroll-behavior-block: auto
+- overscroll-behavior-inline: auto
+- overscroll-behavior-x: auto
+- overscroll-behavior-y: auto
+- padding-block-end: 0px
+- padding-block-start: 0px
+- padding-inline-end: 0px
+- padding-inline-start: 0px
+- page: auto
+- page-orientation: 
+- paint-order: normal
+- perspective: none
+- perspective-origin: 200px 8px
+- pointer-events: auto
+- position: static
+- position-anchor: auto
+- position-area: none
+- position-try-fallbacks: none
+- position-try-order: normal
+- position-visibility: anchors-visible
+- print-color-adjust: economy
+- quotes: auto
+- r: 0px
+- reading-flow: normal
+- reading-order: 0
+- resize: none
+- right: auto
+- rotate: none
+- row-gap: normal
+- ruby-align: space-around
+- ruby-position: over
+- rx: auto
+- ry: auto
+- scale: none
+- scroll-behavior: auto
+- scroll-initial-target: none
+- scroll-margin-block-end: 0px
+- scroll-margin-block-start: 0px
+- scroll-margin-bottom: 0px
+- scroll-margin-inline-end: 0px
+- scroll-margin-inline-start: 0px
+- scroll-margin-left: 0px
+- scroll-margin-right: 0px
+- scroll-margin-top: 0px
+- scroll-marker-group: none
+- scroll-padding-block-end: auto
+- scroll-padding-block-start: auto
+- scroll-padding-bottom: auto
+- scroll-padding-inline-end: auto
+- scroll-padding-inline-start: auto
+- scroll-padding-left: auto
+- scroll-padding-right: auto
+- scroll-padding-top: auto
+- scroll-snap-align: none
+- scroll-snap-stop: normal
+- scroll-snap-type: none
+- scroll-target-group: none
+- scroll-timeline-axis: block
+- scroll-timeline-name: none
+- scrollbar-color: auto
+- scrollbar-gutter: auto
+- scrollbar-width: auto
+- shape-image-threshold: 0
+- shape-margin: 0px
+- shape-outside: none
+- shape-rendering: auto
+- size: 
+- speak: normal
+- stop-color: rgb(0, 0, 0)
+- stop-opacity: 1
+- stroke: none
+- stroke-dasharray: none
+- stroke-dashoffset: 0px
+- stroke-linecap: butt
+- stroke-linejoin: miter
+- stroke-miterlimit: 4
+- stroke-opacity: 1
+- stroke-width: 1px
+- tab-size: 4
+- table-layout: auto
+- text-align: start
+- text-align-last: auto
+- text-anchor: start
+- text-autospace: no-autospace
+- text-box-edge: auto
+- text-box-trim: none
+- text-combine-upright: none
+- text-decoration-color: lab(91.7203 -0.505269 49.9084)
+- text-decoration-line: none
+- text-decoration-skip-ink: auto
+- text-decoration-style: solid
+- text-decoration-thickness: auto
+- text-emphasis-color: lab(91.7203 -0.505269 49.9084)
+- text-emphasis-position: over
+- text-emphasis-style: none
+- text-indent: 0px
+- text-orientation: mixed
+- text-overflow: clip
+- text-rendering: auto
+- text-shadow: none
+- text-size-adjust: 100%
+- text-spacing-trim: normal
+- text-transform: uppercase
+- text-underline-offset: auto
+- text-underline-position: auto
+- text-wrap-mode: wrap
+- text-wrap-style: auto
+- timeline-scope: none
+- top: auto
+- touch-action: auto
+- transform: none
+- transform-box: view-box
+- transform-origin: 200px 8px
+- transform-style: flat
+- transition-behavior: normal
+- transition-delay: 0s
+- transition-duration: 0s
+- transition-property: all
+- transition-timing-function: ease
+- translate: none
+- unicode-bidi: isolate
+- user-select: auto
+- vector-effect: none
+- vertical-align: baseline
+- view-timeline-axis: block
+- view-timeline-inset: auto
+- view-timeline-name: none
+- view-transition-class: none
+- view-transition-group: normal
+- view-transition-name: none
+- visibility: visible
+- white-space-collapse: collapse
+- widows: 2
+- width: 400px
+- will-change: auto
+- word-break: normal
+- word-spacing: 0px
+- writing-mode: horizontal-tb
+- x: 0px
+- y: 0px
+- z-index: auto
+- zoom: 1
+
+Full Computed CSS:
+```css
+
+/* Matched Rule from user-agent */
+p {
+  display: block;
+  margin-block-start: 1em;
+  margin-block-end: 1em;
+  margin-inline-start: 0px;
+  margin-inline-end: 0px;
+}
+
+/* Matched Rule from user-agent */
+address, blockquote, center, div, figure, figcaption, footer, form, header, hr, legend, listing, main, p, plaintext, pre, summary, xmp, article, aside, h1, h2, h3, h4, h5, h6, hgroup, nav, section, search, table, caption, colgroup, col, thead, tbody, tfoot, tr, td, th, dir, dd, dl, dt, menu, ol, ul, li, bdi, output, [dir="ltr" i], [dir="rtl" i], [dir="auto" i] {
+  unicode-bidi: isolate;
+}
+
+/* Matched Rule from regular */
+*, :after, :before, ::backdrop {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-top-width: 0px;
+  border-right-width: 0px;
+  border-bottom-width: 0px;
+  border-left-width: 0px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: initial;
+  border-right-color: initial;
+  border-bottom-color: initial;
+  border-left-color: initial;
+  border-image-source: initial;
+  border-image-slice: initial;
+  border-image-width: initial;
+  border-image-outset: initial;
+  border-image-repeat: initial;
+  margin-top: 0px;
+  margin-right: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+}
+
+/* Matched Rule from regular */
+.text-xs {
+  font-size: var(--text-xs);
+  line-height: var(--tw-leading, var(--text-xs--line-height));
+  font-size: var(--text-xs);
+  line-height: var(--tw-leading, var(--text-xs--line-height));
+}
+
+/* Matched Rule from regular */
+.tracking-\[0\.35em\] {
+  --tw-tracking: .35em;
+  letter-spacing: .35em;
+  --tw-tracking: .35em;
+  letter-spacing: 0.35em;
+}
+
+/* Matched Rule from regular */
+.text-amber-200 {
+  color: var(--color-amber-200);
+  color: var(--color-amber-200);
+}
+
+/* Matched Rule from regular */
+.uppercase {
+  text-transform: uppercase;
+  text-transform: uppercase;
+}
+
+/* Matched Rule from regular */
+* {
+  box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+/* Inherited from ancestor level 1 (user-agent) */
+div {
+  display: block;
+}
+
+/* Inherited from ancestor level 1 (user-agent) */
+address, blockquote, center, div, figure, figcaption, footer, form, header, hr, legend, listing, main, p, plaintext, pre, summary, xmp, article, aside, h1, h2, h3, h4, h5, h6, hgroup, nav, section, search, table, caption, colgroup, col, thead, tbody, tfoot, tr, td, th, dir, dd, dl, dt, menu, ol, ul, li, bdi, output, [dir="ltr" i], [dir="rtl" i], [dir="auto" i] {
+  unicode-bidi: isolate;
+}
+
+/* Inherited from ancestor level 1 (regular) */
+*, :after, :before, ::backdrop {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-top-width: 0px;
+  border-right-width: 0px;
+  border-bottom-width: 0px;
+  border-left-width: 0px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: initial;
+  border-right-color: initial;
+  border-bottom-color: initial;
+  border-left-color: initial;
+  border-image-source: initial;
+  border-image-slice: initial;
+  border-image-width: initial;
+  border-image-outset: initial;
+  border-image-repeat: initial;
+  margin-top: 0px;
+  margin-right: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+}
+
+/* Inherited from ancestor level 1 (regular) */
+* {
+  box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+/* Inherited from ancestor level 2 (user-agent) */
+div {
+  display: block;
+}
+
+/* Inherited from ancestor level 2 (user-agent) */
+address, blockquote, center, div, figure, figcaption, footer, form, header, hr, legend, listing, main, p, plaintext, pre, summary, xmp, article, aside, h1, h2, h3, h4, h5, h6, hgroup, nav, section, search, table, caption, colgroup, col, thead, tbody, tfoot, tr, td, th, dir, dd, dl, dt, menu, ol, ul, li, bdi, output, [dir="ltr" i], [dir="rtl" i], [dir="auto" i] {
+  unicode-bidi: isolate;
+}
+
+/* Inherited from ancestor level 2 (regular) */
+*, :after, :before, ::backdrop {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-top-width: 0px;
+  border-right-width: 0px;
+  border-bottom-width: 0px;
+  border-left-width: 0px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: initial;
+  border-right-color: initial;
+  border-bottom-color: initial;
+  border-left-color: initial;
+  border-image-source: initial;
+  border-image-slice: initial;
+  border-image-width: initial;
+  border-image-outset: initial;
+  border-image-repeat: initial;
+  margin-top: 0px;
+  margin-right: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.mb-6 {
+  margin-bottom: calc(var(--spacing) * 6);
+  margin-bottom: calc(var(--spacing) * 6);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.flex {
+  display: flex;
+  display: flex;
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.flex-col {
+  flex-direction: column;
+  flex-direction: column;
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.gap-4 {
+  gap: calc(var(--spacing) * 4);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.rounded-\[2rem\] {
+  border-radius: 2rem;
+  border-top-left-radius: 2rem;
+  border-top-right-radius: 2rem;
+  border-bottom-right-radius: 2rem;
+  border-bottom-left-radius: 2rem;
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.border {
+  border-style: var(--tw-border-style);
+  border-width: 1px;
+  border-top-width: 1px;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+  border-left-width: 1px;
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.border-white\/10 {
+  border-color: #ffffff1a;
+  border-top-color: rgba(255, 255, 255, 0.1);
+  border-right-color: rgba(255, 255, 255, 0.1);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  border-left-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.border-white\/10 {
+  border-color: color-mix(in oklab, var(--color-white) 10%, transparent);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.bg-white\/5 {
+  background-color: #ffffff0d;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.bg-white\/5 {
+  background-color: color-mix(in oklab, var(--color-white) 5%, transparent);
+  background-color: color-mix(in oklab, var(--color-white) 5%, transparent);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.p-5 {
+  padding: calc(var(--spacing) * 5);
+}
+
+/* Inherited from ancestor level 2 (regular) */
+.backdrop-blur {
+  --tw-backdrop-blur: blur(8px);
+  -webkit-backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+  backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+  --tw-backdrop-blur: blur(8px);
+  backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+}
+
+/* Inherited from ancestor level 2 (regular) */
+* {
+  box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+/* Inherited from ancestor level 3 (user-agent) */
+article, aside, footer, header, hgroup, main, nav, search, section {
+  display: block;
+}
+
+/* Inherited from ancestor level 3 (user-agent) */
+address, blockquote, center, div, figure, figcaption, footer, form, header, hr, legend, listing, main, p, plaintext, pre, summary, xmp, article, aside, h1, h2, h3, h4, h5, h6, hgroup, nav, section, search, table, caption, colgroup, col, thead, tbody, tfoot, tr, td, th, dir, dd, dl, dt, menu, ol, ul, li, bdi, output, [dir="ltr" i], [dir="rtl" i], [dir="auto" i] {
+  unicode-bidi: isolate;
+}
+
+/* Inherited from ancestor level 3 (regular) */
+*, :after, :before, ::backdrop {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-top-width: 0px;
+  border-right-width: 0px;
+  border-bottom-width: 0px;
+  border-left-width: 0px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: initial;
+  border-right-color: initial;
+  border-bottom-color: initial;
+  border-left-color: initial;
+  border-image-source: initial;
+  border-image-slice: initial;
+  border-image-width: initial;
+  border-image-outset: initial;
+  border-image-repeat: initial;
+  margin-top: 0px;
+  margin-right: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+}
+
+/* Inherited from ancestor level 3 (regular) */
+.mx-auto {
+  margin-inline: auto;
+  margin-inline-start: auto;
+  margin-inline-end: auto;
+}
+
+/* Inherited from ancestor level 3 (regular) */
+.w-full {
+  width: 100%;
+  width: 100%;
+}
+
+/* Inherited from ancestor level 3 (regular) */
+.max-w-7xl {
+  max-width: var(--container-7xl);
+  max-width: var(--container-7xl);
+}
+
+/* Inherited from ancestor level 3 (regular) */
+.px-4 {
+  padding-inline: calc(var(--spacing) * 4);
+}
+
+/* Inherited from ancestor level 3 (regular) */
+.py-6 {
+  padding-block: calc(var(--spacing) * 6);
+}
+
+/* Inherited from ancestor level 3 (regular) */
+* {
+  box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+/* Inherited from ancestor level 4 (user-agent) */
+body {
+  display: block;
+  margin-top: 8px;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  margin-left: 8px;
+}
+
+/* Inherited from ancestor level 4 (regular) */
+*, :after, :before, ::backdrop {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-top-width: 0px;
+  border-right-width: 0px;
+  border-bottom-width: 0px;
+  border-left-width: 0px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: initial;
+  border-right-color: initial;
+  border-bottom-color: initial;
+  border-left-color: initial;
+  border-image-source: initial;
+  border-image-slice: initial;
+  border-image-width: initial;
+  border-image-outset: initial;
+  border-image-repeat: initial;
+  margin-top: 0px;
+  margin-right: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+}
+
+/* Inherited from ancestor level 4 (regular) */
+.flex {
+  display: flex;
+  display: flex;
+}
+
+/* Inherited from ancestor level 4 (regular) */
+.min-h-full {
+  min-height: 100%;
+  min-height: 100%;
+}
+
+/* Inherited from ancestor level 4 (regular) */
+.flex-col {
+  flex-direction: column;
+  flex-direction: column;
+}
+
+/* Inherited from ancestor level 4 (regular) */
+.bg-\[radial-gradient\(circle_at_top\,_\#16213e\,_\#0f172a_48\%\,_\#020617_100\%\)\] {
+  background-image: radial-gradient(circle at top, #16213e, #0f172a 48%, #020617 100%);
+  background-image: radial-gradient(circle at center top, rgb(22, 33, 62), rgb(15, 23, 42) 48%, rgb(2, 6, 23) 100%);
+}
+
+/* Inherited from ancestor level 4 (regular) */
+.text-slate-100 {
+  color: var(--color-slate-100);
+  color: var(--color-slate-100);
+}
+
+/* Inherited from ancestor level 4 (regular) */
+* {
+  box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+/* Inherited from ancestor level 4 (regular) */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+/* Inherited from ancestor level 5 (user-agent) */
+html {
+  display: block;
+}
+
+/* Inherited from ancestor level 5 (user-agent) */
+:root {
+  view-transition-name: root;
+}
+
+/* Inherited from ancestor level 5 (regular) */
+:root, :host {
+  --color-red-100: #ffe2e2;
+  --color-red-300: #ffa3a3;
+  --color-red-400: #ff6568;
+  --color-amber-100: #fef3c6;
+  --color-amber-200: #fee685;
+  --color-amber-300: #ffd236;
+  --color-emerald-300: #5ee9b5;
+  --color-emerald-400: #00d294;
+  --color-emerald-950: #002c22;
+  --color-blue-500: #3080ff;
+  --color-blue-600: #155dfc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-300: #cad5e2;
+  --color-slate-400: #90a1b9;
+  --color-slate-500: #62748e;
+  --color-slate-900: #0f172b;
+  --color-slate-950: #020618;
+  --color-black: #000;
+  --color-white: #fff;
+  --spacing: .25rem;
+  --container-md: 28rem;
+  --container-xl: 36rem;
+  --container-2xl: 42rem;
+  --container-4xl: 56rem;
+  --container-6xl: 72rem;
+  --container-7xl: 80rem;
+  --text-xs: .75rem;
+  --text-xs--line-height: calc(1 / .75);
+  --text-sm: .875rem;
+  --text-sm--line-height: calc(1.25 / .875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.75 / 1.125);
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: calc(2 / 1.5);
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.5 / 2.25);
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --tracking-tight: -.025em;
+  --radius-lg: .5rem;
+  --radius-xl: .75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --default-transition-duration: .15s;
+  --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);
+  --default-font-family: var(--font-geist-sans);
+  --default-mono-font-family: var(--font-geist-mono);
+  --color-red-100: #ffe2e2;
+  --color-red-300: #ffa3a3;
+  --color-red-400: #ff6568;
+  --color-amber-100: #fef3c6;
+  --color-amber-200: #fee685;
+  --color-amber-300: #ffd236;
+  --color-emerald-300: #5ee9b5;
+  --color-emerald-400: #00d294;
+  --color-emerald-950: #002c22;
+  --color-blue-500: #3080ff;
+  --color-blue-600: #155dfc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-300: #cad5e2;
+  --color-slate-400: #90a1b9;
+  --color-slate-500: #62748e;
+  --color-slate-900: #0f172b;
+  --color-slate-950: #020618;
+  --color-black: #000;
+  --color-white: #fff;
+  --spacing: .25rem;
+  --container-md: 28rem;
+  --container-xl: 36rem;
+  --container-2xl: 42rem;
+  --container-4xl: 56rem;
+  --container-6xl: 72rem;
+  --container-7xl: 80rem;
+  --text-xs: .75rem;
+  --text-xs--line-height: calc(1 / .75);
+  --text-sm: .875rem;
+  --text-sm--line-height: calc(1.25 / .875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.75 / 1.125);
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: calc(2 / 1.5);
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.5 / 2.25);
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --tracking-tight: -.025em;
+  --radius-lg: .5rem;
+  --radius-xl: .75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --default-transition-duration: .15s;
+  --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);
+  --default-font-family: var(--font-geist-sans);
+  --default-mono-font-family: var(--font-geist-mono);
+}
+
+/* Inherited from ancestor level 5 (regular) */
+:root, :host {
+  --color-red-100: lab(92.243% 10.2865 3.83865);
+  --color-red-300: lab(76.5514% 36.4219 15.5335);
+  --color-red-400: lab(63.7053% 60.7449 31.3109);
+  --color-amber-100: lab(95.916% -1.2165 23.111);
+  --color-amber-200: lab(91.7203% -.505269 49.9084);
+  --color-amber-300: lab(86.4156% 6.13147 78.3961);
+  --color-emerald-300: lab(83.9203% -48.7124 13.8849);
+  --color-emerald-400: lab(75.0771% -60.7313 19.4146);
+  --color-emerald-950: lab(15.0582% -17.9507 2.38369);
+  --color-blue-500: lab(54.1736% 13.3368 -74.6839);
+  --color-blue-600: lab(44.0605% 29.0279 -86.0352);
+  --color-slate-100: lab(96.286% -.852466 -2.46847);
+  --color-slate-300: lab(84.7652% -1.94535 -7.93337);
+  --color-slate-400: lab(65.5349% -2.25151 -14.5072);
+  --color-slate-500: lab(48.0876% -2.03595 -16.5814);
+  --color-slate-900: lab(7.78673% 1.82346 -15.0537);
+  --color-slate-950: lab(1.76974% 1.32743 -9.28855);
+  --color-red-100: lab(92.243% 10.2865 3.83865);
+  --color-red-300: lab(76.5514% 36.4219 15.5335);
+  --color-red-400: lab(63.7053% 60.7449 31.3109);
+  --color-amber-100: lab(95.916% -1.2165 23.111);
+  --color-amber-200: lab(91.7203% -.505269 49.9084);
+  --color-amber-300: lab(86.4156% 6.13147 78.3961);
+  --color-emerald-300: lab(83.9203% -48.7124 13.8849);
+  --color-emerald-400: lab(75.0771% -60.7313 19.4146);
+  --color-emerald-950: lab(15.0582% -17.9507 2.38369);
+  --color-blue-500: lab(54.1736% 13.3368 -74.6839);
+  --color-blue-600: lab(44.0605% 29.0279 -86.0352);
+  --color-slate-100: lab(96.286% -.852466 -2.46847);
+  --color-slate-300: lab(84.7652% -1.94535 -7.93337);
+  --color-slate-400: lab(65.5349% -2.25151 -14.5072);
+  --color-slate-500: lab(48.0876% -2.03595 -16.5814);
+  --color-slate-900: lab(7.78673% 1.82346 -15.0537);
+  --color-slate-950: lab(1.76974% 1.32743 -9.28855);
+}
+
+/* Inherited from ancestor level 5 (regular) */
+*, :after, :before, ::backdrop {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-top-width: 0px;
+  border-right-width: 0px;
+  border-bottom-width: 0px;
+  border-left-width: 0px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: initial;
+  border-right-color: initial;
+  border-bottom-color: initial;
+  border-left-color: initial;
+  border-image-source: initial;
+  border-image-slice: initial;
+  border-image-width: initial;
+  border-image-outset: initial;
+  border-image-repeat: initial;
+  margin-top: 0px;
+  margin-right: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+}
+
+/* Inherited from ancestor level 5 (regular) */
+html, :host {
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
+  line-height: 1.5;
+  font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+  font-feature-settings: var(--default-font-feature-settings, normal);
+  font-variation-settings: var(--default-font-variation-settings, normal);
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+  tab-size: 4;
+  line-height: 1.5;
+  font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+  font-feature-settings: var(--default-font-feature-settings, normal);
+  font-variation-settings: var(--default-font-variation-settings, normal);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inherited from ancestor level 5 (regular) */
+.h-full {
+  height: 100%;
+  height: 100%;
+}
+
+/* Inherited from ancestor level 5 (regular) */
+.antialiased {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Inherited from ancestor level 5 (regular) */
+* {
+  box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+/* Inherited from ancestor level 5 (regular) */
+html {
+  background: var(--background);
+}
+
+/* Inherited from ancestor level 5 (regular) */
+.geist_a71539c9-module__T19VSG__variable {
+  --font-geist-sans: "Geist", "Geist Fallback";
+  --font-geist-sans: "Geist", "Geist Fallback";
+}
+
+/* Inherited from ancestor level 5 (regular) */
+.geist_mono_8d43a2aa-module__8Li5zG__variable {
+  --font-geist-mono: "Geist Mono", "Geist Mono Fallback";
+  --font-geist-mono: "Geist Mono", "Geist Mono Fallback";
+}
+
+/* Inherited from ancestor level 5 (regular) */
+:root {
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --background: #020617;
+  --foreground: #e2e8f0;
+}
+
+```

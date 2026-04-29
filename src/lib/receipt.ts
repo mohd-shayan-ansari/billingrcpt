@@ -41,7 +41,7 @@ export function buildReceiptLines(payload: {
   lines.push(centerLine(`Time: ${formatReceiptTime(payload.timestamp)}`, width));
   lines.push("-".repeat(width));
 
-  lines.push("No.    Qty    Rate     Total");
+  lines.push(formatColumns("No.", "Qty", "Rate", "Total"));
 
   let total = 0;
   const codePrefix = {
@@ -62,7 +62,7 @@ export function buildReceiptLines(payload: {
   }
 
   lines.push("-".repeat(width));
-  lines.push(`Final Total: ${total}`);
+  lines.push(centerLine(`Final Total: ${total}`, width));
 
   return { lines, total };
 }
@@ -103,16 +103,16 @@ function formatReceiptTime(value: Date) {
 }
 
 function formatColumns(no: string, qty: string, rate: string, total: string) {
-  const w1 = 5;
+  const w1 = 6;
   const w2 = 5;
   const w3 = 8;
-  const w4 = 10;
+  const w4 = 9;
   
   return [
-    leftAlign(no, w1),
-    rightAlign(qty, w2),
-    rightAlign(rate, w3),
-    rightAlign(total, w4),
+    centerLine(no, w1),
+    centerLine(qty, w2),
+    centerLine(rate, w3),
+    centerLine(total, w4),
   ].join("");
 }
 
