@@ -96,6 +96,25 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
+  const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const resp = await fetch(`/api/receipts/next?heading=${encodeURIComponent(heading)}`, { cache: "no-store" });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (active && data?.receiptNumber) {
+            setNextReceiptNumber(String(data.receiptNumber));
+          }
+        }
+      } catch (e) {
+        if (active) setNextReceiptNumber("PENDING");
+      }
+    })();
+    return () => { active = false; };
+  }, [heading, lastReceipt]);
 
   useEffect(() => {
     void (async () => {
@@ -233,7 +252,7 @@ export function AppShell() {
 
   function getPreview() {
     return buildReceiptLines({
-      receiptNumber: "PENDING",
+      receiptNumber: nextReceiptNumber,
       heading,
       timestamp: new Date(),
       entries: entries
@@ -751,7 +770,19 @@ export function AppShell() {
             <div className="mt-6 space-y-4 rounded-3xl border border-white/10 bg-white/5 p-4">
               <label className="block space-y-2 text-sm text-slate-300">
                 <span>Counter heading</span>
-                <input value={heading} onChange={(event) => setHeading(event.target.value)} disabled={session.role === "COUNTER_ADMIN"} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300 disabled:opacity-60 disabled:cursor-not-allowed" placeholder="Counter 01" />
+                {session.role === "MASTER_ADMIN" ? (
+                  <select 
+                    value={heading} 
+                    onChange={(event) => setHeading(event.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300"
+                  >
+                    {Array.from({ length: 15 }).map((_, i) => (
+                      <option key={i + 1} value={`Counter ${i + 1}`}>Counter {i + 1}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={heading} disabled className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none disabled:opacity-60 disabled:cursor-not-allowed" />
+                )}
               </label>
 
               <div className="hidden grid-cols-[130px_140px_120px_130px_130px_80px] gap-3 px-2 text-xs uppercase tracking-[0.2em] text-slate-500 md:grid">
