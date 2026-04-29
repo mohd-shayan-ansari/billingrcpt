@@ -3,10 +3,13 @@ import { z } from "zod";
 import { createAuthCookie, createSessionToken, verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const loginSchema = z.object({
-  name: z.string().min(2),
-  password: z.string().min(6),
-});
+const loginSchema = z
+  .object({
+    username: z.string().min(2).optional(),
+    name: z.string().min(2).optional(),
+    password: z.string().min(6),
+  })
+  .refine((data) => !!(data.username || data.name), { message: "Invalid credentials" });
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -16,7 +19,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 400 });
   }
 
-  const user = await prisma.user.findFirst({ where: { name: parsed.data.name } });
+  // Prefer username (email) when provided, fall back to name for backwards compatibility
+  const lookup = parsed.data.username ? { username: parsed.data.username } : { name: parsed.data.name };
+
+  const user = await prisma.user.findFirst({ where: lookup });
 
   if (!user) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

@@ -83,7 +83,7 @@ export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [loginForm, setLoginForm] = useState({ name: "", password: "" });
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [rates, setRates] = useState<RateMap>(initialRates);
   const [rateDraft, setRateDraft] = useState<RateMap>(initialRates);
   const [entries, setEntries] = useState<ReceiptEntryDraft[]>([newEntry("andar")]);
@@ -603,8 +603,8 @@ export function AppShell() {
           <form onSubmit={handleLogin} autoComplete="off" className="space-y-4 rounded-[1.5rem] border border-white/10 bg-white/5 p-6">
             <h2 className="text-2xl font-semibold text-white">Sign in</h2>
             <label className="block space-y-2 text-sm text-slate-300">
-              <span>Name</span>
-              <input name="username" autoComplete="off" className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 transition focus:border-amber-300" value={loginForm.name} onChange={(event) => setLoginForm((current) => ({ ...current, name: event.target.value }))} />
+              <span>Username or Name</span>
+              <input name="username" autoComplete="off" className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 transition focus:border-amber-300" value={loginForm.username} onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))} />
             </label>
             <label className="block space-y-2 text-sm text-slate-300">
               <span>Password</span>
