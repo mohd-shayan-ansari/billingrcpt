@@ -83,7 +83,7 @@ export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [loginForm, setLoginForm] = useState({ name: DEFAULT_MASTER_CREDENTIALS.name, password: DEFAULT_MASTER_CREDENTIALS.password });
+  const [loginForm, setLoginForm] = useState({ name: "", password: "" });
   const [rates, setRates] = useState<RateMap>(initialRates);
   const [rateDraft, setRateDraft] = useState<RateMap>(initialRates);
   const [entries, setEntries] = useState<ReceiptEntryDraft[]>([newEntry("andar")]);
@@ -600,15 +600,15 @@ export function AppShell() {
             </button>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4 rounded-[1.5rem] border border-white/10 bg-white/5 p-6">
+          <form onSubmit={handleLogin} autoComplete="off" className="space-y-4 rounded-[1.5rem] border border-white/10 bg-white/5 p-6">
             <h2 className="text-2xl font-semibold text-white">Sign in</h2>
             <label className="block space-y-2 text-sm text-slate-300">
               <span>Name</span>
-              <input className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 transition focus:border-amber-300" value={loginForm.name} onChange={(event) => setLoginForm((current) => ({ ...current, name: event.target.value }))} />
+              <input name="username" autoComplete="off" className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 transition focus:border-amber-300" value={loginForm.name} onChange={(event) => setLoginForm((current) => ({ ...current, name: event.target.value }))} />
             </label>
             <label className="block space-y-2 text-sm text-slate-300">
               <span>Password</span>
-              <input type="password" className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300" value={loginForm.password} onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))} />
+              <input name="password" type="password" autoComplete="new-password" className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300" value={loginForm.password} onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))} />
             </label>
             <button className="w-full rounded-2xl bg-amber-300 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-200">Enter dashboard</button>
             {message ? <p className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{message}</p> : null}
@@ -621,7 +621,10 @@ export function AppShell() {
   const preview = getPreview();
 
   return (
-    <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
+    datasource db {
+      provider = "postgresql"
+      url      = env("DATABASE_URL")
+    }    <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
       <div className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-white md:text-4xl">{ROLE_LABELS[session.role]} console</h1>
