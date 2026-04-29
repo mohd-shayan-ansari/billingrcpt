@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const search = url.searchParams.get("search")?.trim() ?? "";
 
   const like = `%${search}%`;
-  let whereClause = Prisma.empty;
+  let whereClause: any;
 
   // Build WHERE clause based on role and search filter
   if (session.role === Role.MASTER_ADMIN) {
@@ -39,8 +39,10 @@ export async function GET(request: Request) {
         OR a.name LIKE ${like}
         OR a.username LIKE ${like}
       )`;
+    } else {
+      // Master admin sees all - use 1=1 to keep syntax valid
+      whereClause = Prisma.sql`WHERE 1=1`;
     }
-    // else: no WHERE clause, master admin sees all receipts
   } else {
     // Counter admin sees only their own receipts
     if (search) {
