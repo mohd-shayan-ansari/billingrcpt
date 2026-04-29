@@ -621,10 +621,7 @@ export function AppShell() {
   const preview = getPreview();
 
   return (
-    datasource db {
-      provider = "postgresql"
-      url      = env("DATABASE_URL")
-    }    <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
+    <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
       <div className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-white md:text-4xl">{ROLE_LABELS[session.role]} console</h1>
