@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { jsPDF } from "jspdf";
+
 import { DEFAULT_MASTER_CREDENTIALS, DEFAULT_RATES, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 
@@ -365,18 +365,47 @@ export function AppShell() {
           .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
       });
 
-      const pdfHeight = 8 + savedPreview.lines.length * 5 + 5;
-      const pdf = new jsPDF({ unit: "mm", format: [58, pdfHeight] });
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(9);
-      let y = 8;
-      for (const line of savedPreview.lines) {
-        pdf.text(line.slice(0, 28), 4, y);
-        y += 5;
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const fontSize = 16;
+        const lineHeight = 20;
+        const padding = 24;
+        
+        ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+        
+        let maxWidth = 0;
+        for (const line of savedPreview.lines) {
+          const metrics = ctx.measureText(line);
+          if (metrics.width > maxWidth) {
+            maxWidth = metrics.width;
+          }
+        }
+        
+        canvas.width = maxWidth + padding * 2;
+        canvas.height = savedPreview.lines.length * lineHeight + padding * 2;
+        
+        ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "black";
+        ctx.textBaseline = "top";
+        
+        let y = padding;
+        for (const line of savedPreview.lines) {
+          ctx.fillText(line, padding, y);
+          y += lineHeight;
+        }
+        
+        const dataUrl = canvas.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `${data.receipt.receiptNumber}.png`;
+        a.click();
       }
-      pdf.save(`${data.receipt.receiptNumber}.pdf`);
     } catch (e) {
-      console.error("PDF download failed", e);
+      console.error("Image download failed", e);
     }
 
     setLastReceipt(data.receipt);
