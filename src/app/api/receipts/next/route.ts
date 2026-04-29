@@ -39,9 +39,9 @@ export async function GET(request: Request) {
   const substrStart = counterPrefix.length + 1;
 
   const [sequenceRow] = await prisma.$queryRaw<Array<{ last_seq: number | null }>>(Prisma.sql`
-    SELECT MAX(CAST(SUBSTR(receiptNumber, ${substrStart}) AS INTEGER)) AS last_seq
-    FROM Receipt
-    WHERE receiptNumber LIKE ${likePattern}
+    SELECT MAX(CAST(SUBSTR("receiptNumber", ${substrStart}) AS INTEGER)) AS last_seq
+    FROM "Receipt"
+    WHERE "receiptNumber" LIKE ${likePattern}
   `);
 
   const rawLast = sequenceRow?.last_seq ?? 0;

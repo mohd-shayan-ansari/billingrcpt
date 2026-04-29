@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     // Master admin sees all receipts; apply search filter only if provided
     if (search) {
       whereClause = Prisma.sql`WHERE (
-        r.receiptNumber LIKE ${like}
+        r."receiptNumber" LIKE ${like}
         OR COALESCE(r.heading, '') LIKE ${like}
         OR a.name LIKE ${like}
         OR a.username LIKE ${like}
@@ -46,43 +46,43 @@ export async function GET(request: Request) {
   } else {
     // Counter admin sees only their own receipts
     if (search) {
-      whereClause = Prisma.sql`WHERE r.adminId = ${session.id} AND (
-        r.receiptNumber LIKE ${like}
+      whereClause = Prisma.sql`WHERE r."adminId" = ${session.id} AND (
+        r."receiptNumber" LIKE ${like}
         OR COALESCE(r.heading, '') LIKE ${like}
         OR a.name LIKE ${like}
         OR a.username LIKE ${like}
       )`;
     } else {
-      whereClause = Prisma.sql`WHERE r.adminId = ${session.id}`;
+      whereClause = Prisma.sql`WHERE r."adminId" = ${session.id}`;
     }
   }
 
   const receipts = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     SELECT
       r.id,
-      r.receiptNumber,
+      r."receiptNumber",
       r.heading,
       r.timestamp,
-      r.adminId,
+      r."adminId",
       a.id AS admin_id,
       a.name AS admin_name,
       a.username AS admin_username,
       a.role AS admin_role,
-      r.andarCode,
-      r.andarRate,
-      r.andarQty,
-      r.andarAmount,
-      r.baharCode,
-      r.baharRate,
-      r.baharQty,
-      r.baharAmount,
-      r.resultCode,
-      r.resultRate,
-      r.resultQty,
-      r.resultAmount,
-      r.totalAmount
-    FROM Receipt r
-    JOIN User a ON a.id = r.adminId
+      r."andarCode",
+      r."andarRate",
+      r."andarQty",
+      r."andarAmount",
+      r."baharCode",
+      r."baharRate",
+      r."baharQty",
+      r."baharAmount",
+      r."resultCode",
+      r."resultRate",
+      r."resultQty",
+      r."resultAmount",
+      r."totalAmount"
+    FROM "Receipt" r
+    JOIN "User" a ON a.id = r."adminId"
     ${whereClause}
     ORDER BY r.timestamp DESC
     LIMIT 100
@@ -191,9 +191,9 @@ export async function POST(request: Request) {
   const likePattern = `${counterPrefix}%`;
   const substrStart = counterPrefix.length + 1; // SQLite SUBSTR is 1-based
   const [sequenceRow] = await prisma.$queryRaw<Array<{ last_seq: number | null }>>(Prisma.sql`
-    SELECT MAX(CAST(SUBSTR(receiptNumber, ${substrStart}) AS INTEGER)) AS last_seq
-    FROM Receipt
-    WHERE receiptNumber LIKE ${likePattern}
+    SELECT MAX(CAST(SUBSTR("receiptNumber", ${substrStart}) AS INTEGER)) AS last_seq
+    FROM "Receipt"
+    WHERE "receiptNumber" LIKE ${likePattern}
   `);
 
   const rawLast = sequenceRow?.last_seq ?? 0;
@@ -202,27 +202,27 @@ export async function POST(request: Request) {
   const receiptNumber = `${counterPrefix}${String(nextSequence).padStart(2, "0")}`;
 
   await prisma.$executeRaw(Prisma.sql`
-    INSERT INTO Receipt (
+    INSERT INTO "Receipt" (
       id,
-      receiptNumber,
+      "receiptNumber",
       heading,
-      adminId,
+      "adminId",
       timestamp,
-      andarCode,
-      andarRate,
-      andarQty,
-      andarAmount,
-      baharCode,
-      baharRate,
-      baharQty,
-      baharAmount,
-      resultCode,
-      resultRate,
-      resultQty,
-      resultAmount,
-      totalAmount,
-      createdAt,
-      updatedAt
+      "andarCode",
+      "andarRate",
+      "andarQty",
+      "andarAmount",
+      "baharCode",
+      "baharRate",
+      "baharQty",
+      "baharAmount",
+      "resultCode",
+      "resultRate",
+      "resultQty",
+      "resultAmount",
+      "totalAmount",
+      "createdAt",
+      "updatedAt"
     ) VALUES (
       ${crypto.randomUUID()},
       ${receiptNumber},
@@ -250,30 +250,30 @@ export async function POST(request: Request) {
   const [receipt] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     SELECT
       r.id,
-      r.receiptNumber,
+      r."receiptNumber",
       r.heading,
       r.timestamp,
-      r.adminId,
+      r."adminId",
       a.id AS admin_id,
       a.name AS admin_name,
       a.username AS admin_username,
       a.role AS admin_role,
-      r.andarCode,
-      r.andarRate,
-      r.andarQty,
-      r.andarAmount,
-      r.baharCode,
-      r.baharRate,
-      r.baharQty,
-      r.baharAmount,
-      r.resultCode,
-      r.resultRate,
-      r.resultQty,
-      r.resultAmount,
-      r.totalAmount
-    FROM Receipt r
-    JOIN User a ON a.id = r.adminId
-    WHERE r.receiptNumber = ${receiptNumber}
+      r."andarCode",
+      r."andarRate",
+      r."andarQty",
+      r."andarAmount",
+      r."baharCode",
+      r."baharRate",
+      r."baharQty",
+      r."baharAmount",
+      r."resultCode",
+      r."resultRate",
+      r."resultQty",
+      r."resultAmount",
+      r."totalAmount"
+    FROM "Receipt" r
+    JOIN "User" a ON a.id = r."adminId"
+    WHERE r."receiptNumber" = ${receiptNumber}
     LIMIT 1
   `);
 
