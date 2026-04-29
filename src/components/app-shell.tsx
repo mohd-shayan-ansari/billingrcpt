@@ -474,11 +474,14 @@ export function AppShell() {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      const fontSize = 16;
-      const lineHeight = 20;
-      const padding = 24;
+      const scale = 2; // 2x resolution for crisp, sharp text
+      const fontSize = 18;
+      const lineHeight = 24;
+      const padding = 28;
+      const fontFamily = '"Courier New", Courier, monospace';
+      const boldFont = `bold ${fontSize}px ${fontFamily}`;
       
-      ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+      ctx.font = boldFont;
       
       let maxWidth = 0;
       for (const line of preview.lines) {
@@ -488,19 +491,45 @@ export function AppShell() {
         }
       }
       
-      canvas.width = maxWidth + padding * 2;
-      canvas.height = preview.lines.length * lineHeight + padding * 2;
+      const logicalWidth = maxWidth + padding * 2;
+      const logicalHeight = preview.lines.length * lineHeight + padding * 2;
       
-      ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+      canvas.width = logicalWidth * scale;
+      canvas.height = logicalHeight * scale;
+      canvas.style.width = `${logicalWidth}px`;
+      canvas.style.height = `${logicalHeight}px`;
+      
+      ctx.scale(scale, scale);
+      
+      // Crisp rendering settings
+      ctx.imageSmoothingEnabled = false;
+      
       ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, logicalWidth, logicalHeight);
       
+      ctx.font = boldFont;
       ctx.fillStyle = "black";
       ctx.textBaseline = "top";
       
       let y = padding;
       for (const line of preview.lines) {
         ctx.fillText(line, padding, y);
+        
+        // Underline the Time line
+        if (line.includes("Time:")) {
+          const textWidth = ctx.measureText(line.trimEnd()).width;
+          const trimmedLine = line.trimStart();
+          const leadingSpaces = line.length - trimmedLine.length;
+          const offsetX = ctx.measureText(line.substring(0, leadingSpaces)).width;
+          const underlineY = y + fontSize + 2;
+          ctx.beginPath();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "black";
+          ctx.moveTo(padding + offsetX, underlineY);
+          ctx.lineTo(padding + textWidth, underlineY);
+          ctx.stroke();
+        }
+        
         y += lineHeight;
       }
       
