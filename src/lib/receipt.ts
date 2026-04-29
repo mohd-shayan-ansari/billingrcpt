@@ -57,12 +57,12 @@ export function buildReceiptLines(payload: {
 
     total += entry.amount;
     lines.push(
-      formatColumns(`${codePrefix[entry.itemKey]}-${entry.code}`, String(entry.qty), entry.rate.toFixed(2), String(entry.amount))
+      formatColumns(`${codePrefix[entry.itemKey]}-${entry.code}`, String(entry.qty), entry.rate.toFixed(2), `₹${entry.amount}`)
     );
   }
 
   lines.push("-".repeat(width));
-  lines.push(centerLine(`Final Total: ${total}`, width));
+  lines.push(centerLine(`Final Total: ₹${total}`, width));
 
   return { lines, total };
 }

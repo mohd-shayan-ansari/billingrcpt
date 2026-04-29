@@ -344,76 +344,12 @@ export function AppShell() {
       return;
     }
 
-    // Generate PDF before clearing entries
-    try {
-      const savedPreview = buildReceiptLines({
-        receiptNumber: data.receipt.receiptNumber,
-        heading: data.receipt.heading ?? "",
-        timestamp: new Date(data.receipt.timestamp),
-        entries: entries
-          .map((entry) => {
-            if (!entry.code || !entry.qty) return null;
-            const rate = rates[entry.itemKey];
-            return {
-              itemKey: entry.itemKey,
-              code: entry.code,
-              qty: entry.qty,
-              rate,
-              amount: rate * entry.qty,
-            };
-          })
-          .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
-      });
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const fontSize = 16;
-        const lineHeight = 20;
-        const padding = 24;
-        
-        ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
-        
-        let maxWidth = 0;
-        for (const line of savedPreview.lines) {
-          const metrics = ctx.measureText(line);
-          if (metrics.width > maxWidth) {
-            maxWidth = metrics.width;
-          }
-        }
-        
-        canvas.width = maxWidth + padding * 2;
-        canvas.height = savedPreview.lines.length * lineHeight + padding * 2;
-        
-        ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        ctx.fillStyle = "black";
-        ctx.textBaseline = "top";
-        
-        let y = padding;
-        for (const line of savedPreview.lines) {
-          ctx.fillText(line, padding, y);
-          y += lineHeight;
-        }
-        
-        const dataUrl = canvas.toDataURL("image/png");
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `${data.receipt.receiptNumber}.png`;
-        a.click();
-      }
-    } catch (e) {
-      console.error("Image download failed", e);
-    }
-
     setLastReceipt(data.receipt);
     setEntries([newEntry("andar")]);
     setMessage(`Receipt ${data.receipt.receiptNumber} created`);
     await refreshReceipts();
-    // Print the saved receipt
-    printReceipt(data.receipt);
+    
+    downloadReceiptImage(data.receipt);
   }
 
   function updateEntry(entryId: string, patch: Partial<ReceiptEntryDraft>) {
@@ -447,7 +383,7 @@ export function AppShell() {
     setEntries((current) => [...current, newEntry("andar")]);
   }
 
-  async function printReceipt(receiptData?: ReceiptRecord) {
+  async function downloadReceiptImage(receiptData?: ReceiptRecord) {
     let preview;
     
     if (receiptData) {
@@ -535,45 +471,46 @@ export function AppShell() {
       });
     }
     
-    const lines = preview.lines.map((line) => `<div>${line.replace(/ /g, "&nbsp;")}</div>`).join("");
-    const winName = `_print_${Date.now()}`;
-    const printWindow = window.open("", winName, "width=420,height=800");
-
-    if (!printWindow) {
-      setMessage("Pop-up blocked. Allow pop-ups to print receipts.");
-      return;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const fontSize = 16;
+      const lineHeight = 20;
+      const padding = 24;
+      
+      ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+      
+      let maxWidth = 0;
+      for (const line of preview.lines) {
+        const metrics = ctx.measureText(line);
+        if (metrics.width > maxWidth) {
+          maxWidth = metrics.width;
+        }
+      }
+      
+      canvas.width = maxWidth + padding * 2;
+      canvas.height = preview.lines.length * lineHeight + padding * 2;
+      
+      ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = "black";
+      ctx.textBaseline = "top";
+      
+      let y = padding;
+      for (const line of preview.lines) {
+        ctx.fillText(line, padding, y);
+        y += lineHeight;
+      }
+      
+      const dataUrl = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      const receiptNum = receiptData ? receiptData.receiptNumber : preview.lines.find(l => l.includes('Recpt No'))?.split(': ')[1] || 'receipt';
+      a.download = `${receiptNum}.png`;
+      a.click();
     }
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${preview.lines[0]}</title>
-          <style>
-            @media print {
-              body { width: 58mm; margin: 0; }
-              @page { size: 58mm auto; margin: 0; }
-            }
-            body { margin: 0; font-family: Courier New, monospace; }
-            .ticket { width: 58mm; padding: 2mm 2mm 5mm 2mm; white-space: pre-wrap; font-size: 11px; line-height: 1.25; }
-          </style>
-        </head>
-        <body>
-          <div class="ticket">${lines}</div>
-          <script>
-            window.onload = () => {
-              try {
-                window.focus();
-                setTimeout(() => { window.print(); }, 50);
-              } catch (e) {
-                // ignore
-              }
-              window.onafterprint = () => window.close();
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   }
 
   async function saveRates() {
@@ -1021,7 +958,7 @@ export function AppShell() {
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-semibold text-amber-200">{formatCurrency(receipt.totalAmount)}</div>
-                        <button onClick={() => printReceipt(receipt)} className="mt-2 rounded-lg bg-blue-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-600">Print</button>
+                        <button onClick={() => downloadReceiptImage(receipt)} className="mt-2 rounded-lg bg-blue-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-600">Download</button>
                       </div>
                     </div>
                     <div className="mt-3 grid gap-2 text-sm text-slate-300 md:grid-cols-3">
