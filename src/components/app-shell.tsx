@@ -387,52 +387,67 @@ export function AppShell() {
     let preview;
     
     if (receiptData) {
-      // Printing a saved receipt - reconstruct entries from database fields
-      const savedEntries: Array<{ itemKey: (typeof RECEIPT_KEYS)[number]; code: string; qty: number; rate: number; amount: number }> = [];
-      
-      if (receiptData.andarCode && receiptData.andarQty > 0) {
-        const code = String(receiptData.andarCode || "").split(",")[0].trim();
-        if (code) {
-          savedEntries.push({
-            itemKey: "andar",
-            code,
-            qty: Number(receiptData.andarQty || 0),
-            rate: Number(receiptData.andarRate ?? 12),
-            amount: Number(receiptData.andarAmount || 0),
-          });
+      // If the API returned individual entries (from saveAndPrint), use them directly
+      if (receiptData.entries && receiptData.entries.length > 0) {
+        preview = buildReceiptLines({
+          receiptNumber: receiptData.receiptNumber,
+          heading: receiptData.heading ?? "",
+          timestamp: new Date(receiptData.timestamp),
+          entries: receiptData.entries,
+        });
+      } else {
+        // Reconstruct from grouped DB fields (receipt history download)
+        // Split comma-separated codes into individual receipt lines
+        const savedEntries: Array<{ itemKey: (typeof RECEIPT_KEYS)[number]; code: string; qty: number; rate: number; amount: number }> = [];
+        
+        const itemTypes = [
+          { key: "andar" as const, codeField: receiptData.andarCode, qty: receiptData.andarQty, rate: receiptData.andarRate ?? 12, amount: receiptData.andarAmount },
+          { key: "bahar" as const, codeField: receiptData.baharCode, qty: receiptData.baharQty, rate: receiptData.baharRate ?? 55, amount: receiptData.baharAmount },
+          { key: "result" as const, codeField: receiptData.resultCode, qty: receiptData.resultQty, rate: receiptData.resultRate ?? 110, amount: receiptData.resultAmount },
+        ];
+
+        for (const item of itemTypes) {
+          if (!item.codeField || item.qty <= 0) continue;
+          
+          const codes = String(item.codeField).split(",").map(c => c.trim()).filter(Boolean);
+          
+          if (codes.length <= 1) {
+            // Single code — use stored qty and amount directly
+            const code = codes[0] || "";
+            if (code) {
+              savedEntries.push({
+                itemKey: item.key,
+                code,
+                qty: Number(item.qty),
+                rate: Number(item.rate),
+                amount: Number(item.amount),
+              });
+            }
+          } else {
+            // Multiple codes — distribute qty evenly, each line gets its own amount
+            const perCodeQty = Math.floor(Number(item.qty) / codes.length);
+            const remainder = Number(item.qty) % codes.length;
+            
+            for (let i = 0; i < codes.length; i++) {
+              const qty = perCodeQty + (i < remainder ? 1 : 0);
+              savedEntries.push({
+                itemKey: item.key,
+                code: codes[i],
+                qty,
+                rate: Number(item.rate),
+                amount: Number(item.rate) * qty,
+              });
+            }
+          }
         }
+        
+        preview = buildReceiptLines({
+          receiptNumber: receiptData.receiptNumber,
+          heading: receiptData.heading ?? "",
+          timestamp: new Date(receiptData.timestamp),
+          entries: savedEntries,
+        });
       }
-      if (receiptData.baharCode && receiptData.baharQty > 0) {
-        const code = String(receiptData.baharCode || "").split(",")[0].trim();
-        if (code) {
-          savedEntries.push({
-            itemKey: "bahar",
-            code,
-            qty: Number(receiptData.baharQty || 0),
-            rate: Number(receiptData.baharRate ?? 55),
-            amount: Number(receiptData.baharAmount || 0),
-          });
-        }
-      }
-      if (receiptData.resultCode && receiptData.resultQty > 0) {
-        const code = String(receiptData.resultCode || "").split(",")[0].trim();
-        if (code) {
-          savedEntries.push({
-            itemKey: "result",
-            code,
-            qty: Number(receiptData.resultQty || 0),
-            rate: Number(receiptData.resultRate ?? 110),
-            amount: Number(receiptData.resultAmount || 0),
-          });
-        }
-      }
-      
-      preview = buildReceiptLines({
-        receiptNumber: receiptData.receiptNumber,
-        heading: receiptData.heading ?? "",
-        timestamp: new Date(receiptData.timestamp),
-        entries: savedEntries,
-      });
     } else {
       // Printing draft receipt - fetch next receipt number to display
       let nextNumber = "PENDING";
