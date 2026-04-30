@@ -101,6 +101,8 @@ export function AppShell() {
   const [salesData, setSalesData] = useState<Array<{ heading: string; total: number }>>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
+  const [codeSelectionOpen, setCodeSelectionOpen] = useState<"andar" | "bahar" | "result" | null>(null);
+  const [codeQuantities, setCodeQuantities] = useState<Record<string, Record<string, number>>>({ andar: {}, bahar: {}, result: {} });
 
   useEffect(() => {
     let active = true;
@@ -381,6 +383,126 @@ export function AppShell() {
 
   function addEntryRow() {
     setEntries((current) => [...current, newEntry("andar")]);
+  }
+
+  function adjustCodeQty(category: string, code: string, delta: number) {
+    setCodeQuantities((prev) => {
+      const catMap = { ...prev[category] };
+      const newVal = Math.max(0, (catMap[code] || 0) + delta);
+      if (newVal === 0) {
+        delete catMap[code];
+      } else {
+        catMap[code] = newVal;
+      }
+      return { ...prev, [category]: catMap };
+    });
+  }
+
+  function setCodeQty(category: string, code: string, value: number) {
+    setCodeQuantities((prev) => {
+      const catMap = { ...prev[category] };
+      const newVal = Math.max(0, value);
+      if (newVal === 0) {
+        delete catMap[code];
+      } else {
+        catMap[code] = newVal;
+      }
+      return { ...prev, [category]: catMap };
+    });
+  }
+
+  function codeQuantitiesToEntries(): ReceiptEntryDraft[] {
+    const result: ReceiptEntryDraft[] = [];
+    for (const category of RECEIPT_KEYS) {
+      const catMap = codeQuantities[category] || {};
+      for (const [code, qty] of Object.entries(catMap)) {
+        if (qty > 0) {
+          result.push({
+            id: `${category}-${code}`,
+            itemKey: category,
+            code,
+            qty,
+          });
+        }
+      }
+    }
+    return result;
+  }
+
+  function calculateTotalFromQuantities() {
+    let total = 0;
+    for (const category of RECEIPT_KEYS) {
+      const catMap = codeQuantities[category] || {};
+      for (const qty of Object.values(catMap)) {
+        total += rates[category] * qty;
+      }
+    }
+    return total;
+  }
+
+  function getSelectedItemsSummary() {
+    const items: Array<{ label: string; qty: number; amount: number }> = [];
+    const codePrefix = { andar: "AN", bahar: "BH", result: "RT" } as const;
+    for (const category of RECEIPT_KEYS) {
+      const catMap = codeQuantities[category] || {};
+      for (const [code, qty] of Object.entries(catMap)) {
+        if (qty > 0) {
+          items.push({
+            label: `${codePrefix[category]}-${code}`,
+            qty,
+            amount: rates[category] * qty,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
+  async function saveFromQuantities() {
+    setMessage(null);
+    const draftEntries = codeQuantitiesToEntries();
+    if (draftEntries.length === 0) {
+      setMessage("Please select at least one code with quantity");
+      return;
+    }
+
+    const response = await fetch("/api/receipts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        heading,
+        entries: draftEntries.map((entry) => ({ itemKey: entry.itemKey, code: entry.code, qty: entry.qty })),
+      }),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
+    if (!response.ok || !data.receipt) {
+      setMessage(data.error ?? "Unable to create receipt");
+      return;
+    }
+
+    setLastReceipt(data.receipt);
+    setCodeQuantities({ andar: {}, bahar: {}, result: {} });
+    setMessage(`Receipt ${data.receipt.receiptNumber} created`);
+    await refreshReceipts();
+
+    downloadReceiptImage(data.receipt);
+  }
+
+  function getPreviewFromQuantities() {
+    const draftEntries = codeQuantitiesToEntries();
+    return buildReceiptLines({
+      receiptNumber: nextReceiptNumber,
+      heading,
+      timestamp: new Date(),
+      entries: draftEntries
+        .map((entry) => {
+          if (!entry.code || !entry.qty) return null;
+          const rate = rates[entry.itemKey];
+          return { itemKey: entry.itemKey, code: entry.code, qty: entry.qty, rate, amount: rate * entry.qty };
+        })
+        .filter((e): e is NonNullable<typeof e> => e !== null),
+    });
   }
 
   async function downloadReceiptImage(receiptData?: ReceiptRecord) {
@@ -698,7 +820,7 @@ export function AppShell() {
     );
   }
 
-  const preview = getPreview();
+  const preview = getPreviewFromQuantities();
 
   return (
     <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
@@ -867,17 +989,17 @@ export function AppShell() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-semibold text-white">Create receipt</h2>
-                <p className="text-sm text-slate-400">Select item, type code, add quantity, then add more lines if needed.</p>
+                <p className="text-sm text-slate-400">Select a category, pick codes & quantities, then save.</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right text-sm text-slate-300">Total<div className="text-2xl font-semibold text-amber-200">{formatCurrency(calculateTotal())}</div></div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right text-sm text-slate-300">Total<div className="text-2xl font-semibold text-amber-200">{formatCurrency(calculateTotalFromQuantities())}</div></div>
             </div>
 
             <div className="mt-6 space-y-4 rounded-3xl border border-white/10 bg-white/5 p-4">
               <label className="block space-y-2 text-sm text-slate-300">
                 <span>Counter heading</span>
                 {session.role === "MASTER_ADMIN" ? (
-                  <select 
-                    value={heading} 
+                  <select
+                    value={heading}
                     onChange={(event) => setHeading(event.target.value)}
                     className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300"
                   >
@@ -891,90 +1013,123 @@ export function AppShell() {
                 )}
               </label>
 
-              <div className="hidden grid-cols-[130px_140px_120px_130px_130px_80px] gap-3 px-2 text-xs uppercase tracking-[0.2em] text-slate-500 md:grid">
-                <div>Item</div>
-                <div>Code</div>
-                <div>Qty</div>
-                <div>Rate</div>
-                <div>Total</div>
-                <div></div>
+              {/* 3 Category Buttons */}
+              <div className="grid grid-cols-3 gap-3 mt-4">
+                <button
+                  onClick={() => setCodeSelectionOpen("andar")}
+                  className="relative overflow-hidden rounded-2xl border-2 border-amber-400/30 bg-gradient-to-br from-amber-500/20 to-amber-600/10 px-4 py-6 text-center font-bold text-amber-200 transition-all duration-200 hover:scale-[1.03] hover:border-amber-400/60 hover:shadow-lg hover:shadow-amber-500/20 active:scale-[0.98]"
+                >
+                  <div className="text-lg tracking-wide">Andar</div>
+                  {Object.keys(codeQuantities.andar || {}).length > 0 && (
+                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-xs font-bold text-slate-950">{Object.keys(codeQuantities.andar).length}</div>
+                  )}
+                </button>
+                <button
+                  onClick={() => setCodeSelectionOpen("bahar")}
+                  className="relative overflow-hidden rounded-2xl border-2 border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 px-4 py-6 text-center font-bold text-emerald-200 transition-all duration-200 hover:scale-[1.03] hover:border-emerald-400/60 hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98]"
+                >
+                  <div className="text-lg tracking-wide">Bahar</div>
+                  {Object.keys(codeQuantities.bahar || {}).length > 0 && (
+                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-xs font-bold text-slate-950">{Object.keys(codeQuantities.bahar).length}</div>
+                  )}
+                </button>
+                <button
+                  onClick={() => setCodeSelectionOpen("result")}
+                  className="relative overflow-hidden rounded-2xl border-2 border-violet-400/30 bg-gradient-to-br from-violet-500/20 to-violet-600/10 px-4 py-6 text-center font-bold text-violet-200 transition-all duration-200 hover:scale-[1.03] hover:border-violet-400/60 hover:shadow-lg hover:shadow-violet-500/20 active:scale-[0.98]"
+                >
+                  <div className="text-lg tracking-wide">Result</div>
+                  {Object.keys(codeQuantities.result || {}).length > 0 && (
+                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-violet-400 text-xs font-bold text-slate-950">{Object.keys(codeQuantities.result).length}</div>
+                  )}
+                </button>
               </div>
 
-              {entries.map((entry) => {
-                const rate = rates[entry.itemKey];
-                const amount = computeEntryAmount(entry);
-                return (
-                  <div key={entry.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3 md:grid-cols-[130px_140px_120px_130px_130px_80px] md:items-end">
-                    <label className="space-y-2 text-sm text-slate-300">
-                      <span className="md:hidden">Item</span>
-                      <select
-                        value={entry.itemKey}
-                        onChange={(event) => updateEntry(entry.id, { itemKey: event.target.value as (typeof RECEIPT_KEYS)[number] })}
-                        className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white outline-none transition focus:border-amber-300"
-                      >
-                        <option value="andar">AN</option>
-                        <option value="bahar">BH</option>
-                        <option value="result">RT</option>
-                      </select>
-                    </label>
-
-                    <label className="space-y-2 text-sm text-slate-300">
-                      <span className="md:hidden">Code</span>
-                      <input
-                        value={entry.code}
-                        onChange={(event) => updateEntry(entry.id, { code: event.target.value })}
-                        inputMode="numeric"
-                        maxLength={entry.itemKey === "result" ? 2 : 1}
-                        className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white outline-none transition focus:border-amber-300"
-                        placeholder={entry.itemKey === "result" ? "00 - 99" : "0 - 9"}
-                      />
-                    </label>
-
-                    <label className="space-y-2 text-sm text-slate-300">
-                      <span className="md:hidden">Qty</span>
-                      <input
-                        type="number"
-                        value={entry.qty || ""}
-                        onChange={(event) => updateEntry(entry.id, { qty: event.target.value === "" ? 0 : Number(event.target.value) })}
-                        className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white outline-none transition focus:border-amber-300"
-                      />
-                    </label>
-
-                    <div className="space-y-2 text-sm text-slate-300">
-                      <span className="md:hidden">Rate</span>
-                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-amber-200">{formatCurrency(rate)}</div>
-                    </div>
-
-                    <div className="space-y-2 text-sm text-slate-300">
-                      <span className="md:hidden">Total</span>
-                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">{formatCurrency(amount)}</div>
-                    </div>
-
-                    <button
-                      onClick={() => removeEntryRow(entry.id)}
-                      className="rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={entries.length === 1}
-                    >
-                      Remove
-                    </button>
+              {/* Selected Items Summary */}
+              {getSelectedItemsSummary().length > 0 && (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">Selected Items</div>
+                  <div className="flex flex-wrap gap-2">
+                    {getSelectedItemsSummary().map((item) => (
+                      <div key={item.label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm">
+                        <span className="font-semibold text-white">{item.label}</span>
+                        <span className="text-slate-400">×{item.qty}</span>
+                        <span className="text-amber-200">{formatCurrency(item.amount)}</span>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-
-              <button onClick={addEntryRow} className="rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3 font-semibold text-white transition hover:border-amber-300 hover:text-amber-100">
-                Add more item
-              </button>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <button onClick={saveAndPrint} className="w-full rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Save</button>
+              <button onClick={saveFromQuantities} className="w-full rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Save</button>
             </div>
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-300">
               <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Grand total</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{formatCurrency(calculateTotal())}</div>
+              <div className="mt-2 text-2xl font-semibold text-white">{formatCurrency(calculateTotalFromQuantities())}</div>
             </div>
           </div>
+
+          {/* Code Selection Overlay */}
+          {codeSelectionOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setCodeSelectionOpen(null); }}>
+              <div className="relative mx-4 w-full max-w-lg max-h-[85vh] flex flex-col rounded-[2rem] border border-white/15 bg-slate-950/95 shadow-2xl shadow-black/50">
+                <div className="flex items-center justify-between p-5 pb-3">
+                  <h3 className="text-xl font-bold text-white">
+                    {codeSelectionOpen === "andar" ? "Andar" : codeSelectionOpen === "bahar" ? "Bahar" : "Result"} — Select Codes
+                  </h3>
+                  <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-400">
+                    Rate: <span className="text-amber-200 font-semibold">{formatCurrency(rates[codeSelectionOpen])}</span>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-5 pb-3" style={{ maxHeight: "60vh" }}>
+                  <div className={`grid gap-2 ${codeSelectionOpen === "result" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+                    {(codeSelectionOpen === "result"
+                      ? Array.from({ length: 100 }, (_, i) => String(i).padStart(2, "0"))
+                      : Array.from({ length: 10 }, (_, i) => String(i))
+                    ).map((code) => {
+                      const qty = codeQuantities[codeSelectionOpen]?.[code] || 0;
+                      return (
+                        <div key={code} className={`flex items-center justify-between rounded-xl border px-4 py-2.5 transition-colors ${qty > 0 ? "border-amber-400/30 bg-amber-400/10" : "border-white/10 bg-white/5"}`}>
+                          <span className={`font-mono text-lg font-bold ${qty > 0 ? "text-amber-200" : "text-slate-300"}`}>{code}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => adjustCodeQty(codeSelectionOpen!, code, -1)}
+                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-slate-950/80 text-lg font-bold text-white transition hover:border-red-400/50 hover:bg-red-400/20 hover:text-red-200 active:scale-90"
+                            >−</button>
+                            <input
+                              type="number"
+                              value={qty || ""}
+                              onChange={(e) => setCodeQty(codeSelectionOpen!, code, e.target.value === "" ? 0 : Number(e.target.value))}
+                              className="w-16 rounded-xl border border-white/10 bg-slate-950/80 px-2 py-1.5 text-center font-mono text-lg font-semibold text-white outline-none transition focus:border-amber-300"
+                              placeholder="0"
+                            />
+                            <button
+                              onClick={() => adjustCodeQty(codeSelectionOpen!, code, 1)}
+                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-slate-950/80 text-lg font-bold text-white transition hover:border-emerald-400/50 hover:bg-emerald-400/20 hover:text-emerald-200 active:scale-90"
+                            >+</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 border-t border-white/10 p-5 pt-4">
+                  <button
+                    onClick={() => setCodeSelectionOpen(null)}
+                    className="flex-1 rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3 font-semibold text-white transition hover:border-amber-300/60 hover:text-amber-100"
+                  >Back</button>
+                  <button
+                    onClick={() => setCodeSelectionOpen(null)}
+                    className="flex-1 rounded-2xl bg-amber-300 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-200"
+                  >Done</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5">
             <div className="flex items-center justify-between gap-3">
