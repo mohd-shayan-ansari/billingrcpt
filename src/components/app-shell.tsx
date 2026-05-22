@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { Capacitor } from "@capacitor/core";
+import { Directory, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
+
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
@@ -127,6 +131,27 @@ function resolveSalesSlots(slots: readonly string[]) {
 
 const RESOLVED_SALES_SLOTS = resolveSalesSlots(SALES_TIME_SLOTS);
 
+function getCurrentSalesSlotId() {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  let selectedSlot = RESOLVED_SALES_SLOTS[0]?.id ?? "all";
+  for (const slot of RESOLVED_SALES_SLOTS) {
+    if (currentMinutes >= slot.minutes) {
+      selectedSlot = slot.id;
+    } else {
+      break;
+    }
+  }
+
+  return selectedSlot;
+}
+
+function getSlotEmoji(label: string) {
+  const [hourPart] = label.split(":").map((part) => Number(part));
+  return hourPart >= 9 && hourPart < 18 ? "☀️" : "🌙";
+}
+
 export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,7 +181,7 @@ export function AppShell() {
   const [posScreen, setPosScreen] = useState<"catalog" | "cart" | "receipt">("catalog");
   const [salesView, setSalesView] = useState<"summary" | "history">("summary");
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
-  const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>("all");
+  const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
 
@@ -1035,19 +1060,51 @@ export function AppShell() {
     const receiptNum = receiptData ? receiptData.receiptNumber : preview.lines.find((line) => line.includes("Recpt No"))?.split(": ")[1] || "receipt";
 
     if (mode === "print") {
-      const printWindow = window.open("", "_blank", "noopener,noreferrer,width=420,height=720");
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(`<!doctype html><html><head><title>${receiptNum}</title><style>html,body{margin:0;padding:0;background:#fff}img{display:block;width:100%;height:auto}</style></head><body><img src="${dataUrl}" alt="${receiptNum}" onload="setTimeout(() => { window.print(); }, 200)" /></body></html>`);
-        printWindow.document.close();
-        printWindow.focus();
-        return;
-      }
+      const frame = document.createElement("iframe");
+      frame.style.position = "fixed";
+      frame.style.right = "0";
+      frame.style.bottom = "0";
+      frame.style.width = "0";
+      frame.style.height = "0";
+      frame.style.border = "0";
+      frame.setAttribute("aria-hidden", "true");
+      frame.srcdoc = `<!doctype html><html><head><title>${receiptNum}</title><style>html,body{margin:0;padding:0;background:#fff}img{display:block;width:100%;height:auto}</style></head><body><img src="${dataUrl}" alt="${receiptNum}" /></body></html>`;
+
+      document.body.appendChild(frame);
+      await new Promise<void>((resolve) => {
+        frame.onload = () => resolve();
+      });
+
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      window.setTimeout(() => frame.remove(), 1000);
+      return;
+    }
+
+    if (Capacitor.isNativePlatform()) {
+      const base64Data = dataUrl.split(",")[1] || "";
+      const path = `receipts/${receiptNum}.png`;
+      await Filesystem.writeFile({
+        path,
+        data: base64Data,
+        directory: Directory.Cache,
+        recursive: true,
+      });
+
+      const fileUri = await Filesystem.getUri({ path, directory: Directory.Cache });
+      await Share.share({
+        title: receiptNum,
+        text: `Receipt ${receiptNum}`,
+        url: fileUri.uri,
+        dialogTitle: "Save or share receipt",
+      });
+      return;
     }
 
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = `${receiptNum}.png`;
+    a.rel = "noopener";
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
@@ -1397,7 +1454,7 @@ export function AppShell() {
                     onClick={() => setSalesSlotFilterId(slot.id)}
                     className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${salesSlotFilterId === slot.id ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
                   >
-                    {slot.label}
+                    <span className="mr-1">{getSlotEmoji(slot.label)}</span>{slot.label}
                   </button>
                 ))}
               </div>
