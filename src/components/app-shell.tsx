@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { DEFAULT_MASTER_CREDENTIALS, DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
+import { GlassCard, StatTile } from "@/components/ui/cards";
 
 type SessionUser = {
   id: string;
@@ -92,6 +93,40 @@ const POS_CODE_GRID: Record<(typeof RECEIPT_KEYS)[number], string[]> = {
   result: Array.from({ length: 100 }, (_, index) => String(index).padStart(2, "0")),
 };
 
+const SALES_TIME_SLOTS = [
+  "09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:20", "11:40", "12:00", "12:20", "12:40",
+  "01:00", "01:20", "01:40", "02:00", "02:20", "02:40", "03:00", "03:20", "03:40", "04:00", "04:20", "04:40", "05:00", "05:20", "05:40",
+  "06:00", "06:20", "06:40", "07:00", "07:20", "07:40", "08:00", "08:20", "08:40", "09:00", "09:20", "09:40", "10:00", "10:20", "10:40",
+] as const;
+
+function resolveSalesSlots(slots: readonly string[]) {
+  let offsetMinutes = 0;
+  let previous = -1;
+
+  return slots.map((label, index) => {
+    const [hourPart, minutePart] = label.split(":").map((part) => Number(part));
+    let hour = hourPart % 12;
+    if (hour === 0) {
+      hour = 12;
+    }
+
+    let absolute = hour * 60 + minutePart + offsetMinutes;
+    while (absolute <= previous) {
+      offsetMinutes += 12 * 60;
+      absolute = hour * 60 + minutePart + offsetMinutes;
+    }
+
+    previous = absolute;
+    return {
+      id: `${label}-${index}`,
+      label,
+      minutes: absolute % (24 * 60),
+    };
+  });
+}
+
+const RESOLVED_SALES_SLOTS = resolveSalesSlots(SALES_TIME_SLOTS);
+
 export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +142,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "inventory" | "customers" | "payments" | "staff">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
@@ -118,7 +153,11 @@ export function AppShell() {
   const [codeQuantities, setCodeQuantities] = useState<Record<string, Record<string, number>>>({ andar: {}, bahar: {}, result: {} });
   const [activeMode, setActiveMode] = useState<"service" | "simple">("service");
   const [activeCategory, setActiveCategory] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
-  const [cartOpen, setCartOpen] = useState(false);
+  const [posScreen, setPosScreen] = useState<"catalog" | "cart" | "receipt">("catalog");
+  const [selectedTimeSlotId, setSelectedTimeSlotId] = useState<string>("all");
+  const [salesView, setSalesView] = useState<"summary" | "history">("summary");
+  const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
+  const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>("all");
 
   useEffect(() => {
     let active = true;
@@ -479,9 +518,68 @@ export function AppShell() {
     return codeQuantities[category]?.[code] || 0;
   }
 
+  function getTimeSlotIdForTimestamp(value: string) {
+    const date = new Date(value);
+    const currentMinutes = date.getHours() * 60 + date.getMinutes();
+
+    let match: string | null = null;
+    for (const slot of RESOLVED_SALES_SLOTS) {
+      if (currentMinutes >= slot.minutes) {
+        match = slot.id;
+      } else {
+        break;
+      }
+    }
+
+    return match;
+  }
+
+  function summarizeItemsFromReceipts(records: ReceiptRecord[]) {
+    const codePrefix = { andar: "AN", bahar: "BH", result: "RT" } as const;
+    const items = new Map<string, { label: string; qty: number; amount: number }>();
+
+    for (const receipt of records) {
+      const entriesForReceipt = toReceiptEntries(receipt);
+      for (const entry of entriesForReceipt) {
+        const key = `${entry.itemKey}-${entry.code}`;
+        const current = items.get(key);
+        if (current) {
+          current.qty += entry.qty;
+          current.amount += entry.amount;
+        } else {
+          items.set(key, {
+            label: `${codePrefix[entry.itemKey]}-${entry.code}`,
+            qty: entry.qty,
+            amount: entry.amount,
+          });
+        }
+      }
+    }
+
+    return Array.from(items.values()).sort((a, b) => b.qty - a.qty || b.amount - a.amount);
+  }
+
+  function getDateOnly(value: string) {
+    const date = new Date(value);
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return localDate.toISOString().split("T")[0];
+  }
+
+  function getFilteredSalesHistory() {
+    return receipts.filter((receipt) => {
+      const matchDate = getDateOnly(receipt.timestamp) === salesDate;
+      const matchSearch = !salesReceiptSearch.trim()
+        || receipt.receiptNumber.toLowerCase().includes(salesReceiptSearch.toLowerCase())
+        || (receipt.heading ?? "").toLowerCase().includes(salesReceiptSearch.toLowerCase())
+        || receipt.admin?.name?.toLowerCase().includes(salesReceiptSearch.toLowerCase());
+      const matchSlot = salesSlotFilterId === "all" || getTimeSlotIdForTimestamp(receipt.timestamp) === salesSlotFilterId;
+      return matchDate && matchSearch && matchSlot;
+    });
+  }
+
   function incrementCodeQuantity(category: (typeof RECEIPT_KEYS)[number], code: string) {
     adjustCodeQty(category, code, 1);
-    setCartOpen(true);
+    setPosScreen("catalog");
   }
 
   function renderMobileDashboard() {
@@ -493,9 +591,31 @@ export function AppShell() {
     const selectedItems = getSelectedItemsSummary();
     const selectedCount = getSelectedCount();
     const visibleCategories = getVisibleCatalogCategories();
+    const total = calculateTotalFromQuantities();
+    const filteredReceipts = selectedTimeSlotId === "all"
+      ? receipts
+      : receipts.filter((receipt) => getTimeSlotIdForTimestamp(receipt.timestamp) === selectedTimeSlotId);
+    const slotItemSummary = summarizeItemsFromReceipts(filteredReceipts);
+    const today = new Date();
+    const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const todaysReceipts = receipts.filter((receipt) => getDateOnly(receipt.timestamp) === todayDate);
+    const todayTotal = todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
+    const averageTicket = todaysReceipts.length ? Math.round(todayTotal / todaysReceipts.length) : 0;
+    const latestReceiptPreview = lastReceipt ? buildReceiptLines({
+      receiptNumber: lastReceipt.receiptNumber,
+      heading: lastReceipt.heading ?? heading,
+      timestamp: new Date(lastReceipt.timestamp),
+      entries: toReceiptEntries(lastReceipt),
+    }) : null;
 
     return (
-      <div className="space-y-4 pb-28">
+      <div className="space-y-4 pb-36">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatTile label="Today Receipts" value={String(todaysReceipts.length)} tone="slate" />
+          <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
+          <StatTile label="Avg Ticket" value={formatCurrency(averageTicket)} tone="amber" />
+        </div>
+
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -610,8 +730,9 @@ export function AppShell() {
                 </div>
               ))}
 
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={addEntryRow} className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white">Add line</button>
+                <button type="button" onClick={submitReceipt} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200">Save</button>
                 <button type="button" onClick={saveAndPrint} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">Save &amp; Print</button>
               </div>
             </div>
@@ -619,6 +740,8 @@ export function AppShell() {
         ) : (
           <>
             <section className="space-y-4">
+              {posScreen === "catalog" ? (
+                <>
               {visibleCategories.map((category) => (
                 <div key={category} className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -654,45 +777,45 @@ export function AppShell() {
                   </div>
                 </div>
               ))}
-            </section>
 
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              className="fixed bottom-20 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-2xl shadow-emerald-500/20"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
-                <span className="text-base">View Cart — {formatCurrency(calculateTotalFromQuantities())}</span>
-                <span>›</span>
-              </div>
-            </button>
+              <button
+                type="button"
+                onClick={() => setPosScreen("cart")}
+                className="fixed bottom-24 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-2xl shadow-emerald-500/20"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
+                  <span className="text-base">View Cart — {formatCurrency(total)}</span>
+                  <span>›</span>
+                </div>
+              </button>
+              </>
+              ) : null}
 
-            {cartOpen && (
-              <div className="fixed inset-0 z-40 bg-black/60 px-3 pb-4 pt-24 backdrop-blur-sm" onClick={(event) => { if (event.target === event.currentTarget) setCartOpen(false); }}>
-                <div className="mx-auto flex max-h-[78vh] w-full max-w-md flex-col rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 shadow-2xl shadow-black/40">
+              {posScreen === "cart" ? (
+                <div className="rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 shadow-2xl shadow-black/40">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-2xl font-semibold text-white">Cart</h3>
-                      <p className="text-sm text-slate-400">Adjust quantities before charging.</p>
+                      <p className="text-sm text-slate-400">Current order with live quantity edits.</p>
                     </div>
-                    <button type="button" onClick={() => setCartOpen(false)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+                    <button type="button" onClick={() => setPosScreen("catalog")} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Back</button>
                   </div>
 
-                  <div className="mt-4 flex-1 space-y-3 overflow-y-auto">
+                  <div className="mt-4 space-y-3">
                     {selectedItems.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No items selected yet.</div>
                     ) : (
                       selectedItems.map((item) => (
-                        <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div key={`${item.category}-${item.code}`} className={`flex items-center justify-between gap-3 rounded-2xl border p-4 ${item.qty > 1 ? "border-emerald-400/70 bg-emerald-400/10" : "border-white/10 bg-white/5"}`}>
                           <div>
                             <div className="text-lg font-semibold text-white">{item.label}</div>
-                            <div className="text-sm text-slate-400">Qty {item.qty}</div>
+                            <div className="text-sm text-slate-400">{formatCurrency(item.amount)}</div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <button type="button" onClick={() => adjustCodeQty(item.label.startsWith("AN") ? "andar" : item.label.startsWith("BH") ? "bahar" : "result", item.label.split("-")[1], -1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl text-white">−</button>
+                            <button type="button" onClick={() => adjustCodeQty(item.category, item.code, -1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl text-white">−</button>
                             <div className="min-w-10 text-center text-lg font-semibold text-white">{item.qty}</div>
-                            <button type="button" onClick={() => adjustCodeQty(item.label.startsWith("AN") ? "andar" : item.label.startsWith("BH") ? "bahar" : "result", item.label.split("-")[1], 1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-xl font-semibold text-slate-950">+</button>
+                            <button type="button" onClick={() => adjustCodeQty(item.category, item.code, 1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-xl font-semibold text-slate-950">+</button>
                           </div>
                         </div>
                       ))
@@ -700,13 +823,36 @@ export function AppShell() {
                   </div>
 
                   <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
-                    <div className="flex items-center justify-between text-sm text-slate-300"><span>Subtotal</span><span>{formatCurrency(calculateTotalFromQuantities())}</span></div>
-                    <div className="flex items-center justify-between text-2xl font-semibold text-white"><span>TOTAL</span><span className="text-emerald-300">{formatCurrency(calculateTotalFromQuantities())}</span></div>
-                    <button type="button" onClick={saveFromQuantities} className="w-full rounded-[1.5rem] bg-red-500 px-4 py-4 text-lg font-semibold text-white">Charge {formatCurrency(calculateTotalFromQuantities())}</button>
+                    <div className="flex items-center justify-between text-sm text-slate-300"><span>Subtotal</span><span>{formatCurrency(total)}</span></div>
+                    <div className="flex items-center justify-between text-2xl font-semibold text-white"><span>Total</span><span className="text-emerald-300">{formatCurrency(total)}</span></div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button type="button" onClick={() => saveFromQuantities(false)} className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Save Only</button>
+                      <button type="button" onClick={() => saveFromQuantities(true)} className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white">Charge {formatCurrency(total)}</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : null}
+
+              {posScreen === "receipt" ? (
+                <div className="rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 shadow-2xl shadow-black/40">
+                  <div className="text-center">
+                    <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400/20 text-3xl text-emerald-300">✓</div>
+                    <h3 className="text-2xl font-semibold text-white">Payment Successful</h3>
+                    <p className="text-sm text-slate-400">Receipt ready for print and share.</p>
+                  </div>
+                  <div className="mt-4 rounded-3xl border border-slate-300 bg-white p-4 text-slate-900">
+                    <div className="space-y-1 font-mono text-[11px] leading-5">
+                      {(latestReceiptPreview?.lines ?? preview.lines).map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button type="button" onClick={() => downloadReceiptImage(lastReceipt ?? undefined)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Send Digital</button>
+                    <button type="button" onClick={() => downloadReceiptImage(lastReceipt ?? undefined)} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Print Receipt</button>
+                  </div>
+                  <button type="button" onClick={() => setPosScreen("catalog")} className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">New Transaction</button>
+                </div>
+              ) : null}
+            </section>
           </>
         )}
 
@@ -724,18 +870,103 @@ export function AppShell() {
             </div>
           </div>
         </section>
+
+        <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-semibold text-white">Past receipts</h3>
+              <p className="text-sm text-slate-400">Open or download any saved receipt.</p>
+            </div>
+            <button type="button" onClick={() => void refreshReceipts()} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Refresh</button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Time Slots</div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setSelectedTimeSlotId("all")}
+                className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${selectedTimeSlotId === "all" ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
+              >
+                All
+              </button>
+              {RESOLVED_SALES_SLOTS.map((slot) => (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => setSelectedTimeSlotId(slot.id)}
+                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${selectedTimeSlotId === slot.id ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
+                >
+                  {slot.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Items Bought In Selection</div>
+              {slotItemSummary.length === 0 ? (
+                <div className="text-sm text-slate-400">No items found for this time slot.</div>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {slotItemSummary.slice(0, 12).map((item) => (
+                    <div key={item.label} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2">
+                      <span className="text-sm font-semibold text-white">{item.label}</span>
+                      <span className="text-xs text-emerald-300">Qty {item.qty} • {formatCurrency(item.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {filteredReceipts.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No receipts yet.</div>
+            ) : (
+              filteredReceipts.map((receipt) => (
+                <div key={receipt.id} className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                  <div>
+                    <div className="font-semibold text-white">{receipt.receiptNumber} • {receipt.heading ?? "Counter"}</div>
+                    <div className="text-sm text-slate-400">{new Date(receipt.timestamp).toLocaleString("en-IN")} • {formatCurrency(receipt.totalAmount)}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLastReceipt(receipt);
+                        setPosScreen("receipt");
+                      }}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void downloadReceiptImage(receipt)}
+                      className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-emerald-950"
+                    >
+                      Download
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
     );
   }
 
   function getSelectedItemsSummary() {
-    const items: Array<{ label: string; qty: number; amount: number }> = [];
+    const items: Array<{ category: (typeof RECEIPT_KEYS)[number]; code: string; label: string; qty: number; amount: number }> = [];
     const codePrefix = { andar: "AN", bahar: "BH", result: "RT" } as const;
     for (const category of RECEIPT_KEYS) {
       const catMap = codeQuantities[category] || {};
       for (const [code, qty] of Object.entries(catMap)) {
         if (qty > 0) {
           items.push({
+            category,
+            code,
             label: `${codePrefix[category]}-${code}`,
             qty,
             amount: rates[category] * qty,
@@ -746,7 +977,7 @@ export function AppShell() {
     return items;
   }
 
-  async function saveFromQuantities() {
+  async function saveFromQuantities(autoDownload = true) {
     setMessage(null);
     const draftEntries = codeQuantitiesToEntries();
     if (draftEntries.length === 0) {
@@ -771,10 +1002,60 @@ export function AppShell() {
 
     setLastReceipt(data.receipt);
     setCodeQuantities({ andar: {}, bahar: {}, result: {} });
+    setPosScreen("receipt");
     setMessage(`Receipt ${data.receipt.receiptNumber} created`);
     await refreshReceipts();
 
-    downloadReceiptImage(data.receipt);
+    if (autoDownload) {
+      void downloadReceiptImage(data.receipt);
+    }
+  }
+
+  function toReceiptEntries(receiptData: ReceiptRecord) {
+    if (receiptData.entries && receiptData.entries.length > 0) {
+      return receiptData.entries;
+    }
+
+    const savedEntries: Array<{ itemKey: (typeof RECEIPT_KEYS)[number]; code: string; qty: number; rate: number; amount: number }> = [];
+    const itemTypes = [
+      { key: "andar" as const, codeField: receiptData.andarCode, qty: receiptData.andarQty, rate: receiptData.andarRate ?? 12, amount: receiptData.andarAmount },
+      { key: "bahar" as const, codeField: receiptData.baharCode, qty: receiptData.baharQty, rate: receiptData.baharRate ?? 55, amount: receiptData.baharAmount },
+      { key: "result" as const, codeField: receiptData.resultCode, qty: receiptData.resultQty, rate: receiptData.resultRate ?? 110, amount: receiptData.resultAmount },
+    ];
+
+    for (const item of itemTypes) {
+      if (!item.codeField || item.qty <= 0) continue;
+
+      const codes = String(item.codeField).split(",").map((c) => c.trim()).filter(Boolean);
+      if (codes.length <= 1) {
+        const code = codes[0] || "";
+        if (code) {
+          savedEntries.push({
+            itemKey: item.key,
+            code,
+            qty: Number(item.qty),
+            rate: Number(item.rate),
+            amount: Number(item.amount),
+          });
+        }
+      } else {
+        const perCodeQty = Math.floor(Number(item.qty) / codes.length);
+        const remainder = Number(item.qty) % codes.length;
+
+        for (let i = 0; i < codes.length; i++) {
+          const qty = perCodeQty + (i < remainder ? 1 : 0);
+          savedEntries.push({
+            itemKey: item.key,
+            code: codes[i],
+            qty,
+            rate: Number(item.rate),
+            amount: Number(item.rate) * qty,
+          });
+        }
+      }
+    }
+
+    return savedEntries;
   }
 
   function getPreviewFromQuantities() {
@@ -797,67 +1078,12 @@ export function AppShell() {
     let preview;
     
     if (receiptData) {
-      // If the API returned individual entries (from saveAndPrint), use them directly
-      if (receiptData.entries && receiptData.entries.length > 0) {
-        preview = buildReceiptLines({
-          receiptNumber: receiptData.receiptNumber,
-          heading: receiptData.heading ?? "",
-          timestamp: new Date(receiptData.timestamp),
-          entries: receiptData.entries,
-        });
-      } else {
-        // Reconstruct from grouped DB fields (receipt history download)
-        // Split comma-separated codes into individual receipt lines
-        const savedEntries: Array<{ itemKey: (typeof RECEIPT_KEYS)[number]; code: string; qty: number; rate: number; amount: number }> = [];
-        
-        const itemTypes = [
-          { key: "andar" as const, codeField: receiptData.andarCode, qty: receiptData.andarQty, rate: receiptData.andarRate ?? 12, amount: receiptData.andarAmount },
-          { key: "bahar" as const, codeField: receiptData.baharCode, qty: receiptData.baharQty, rate: receiptData.baharRate ?? 55, amount: receiptData.baharAmount },
-          { key: "result" as const, codeField: receiptData.resultCode, qty: receiptData.resultQty, rate: receiptData.resultRate ?? 110, amount: receiptData.resultAmount },
-        ];
-
-        for (const item of itemTypes) {
-          if (!item.codeField || item.qty <= 0) continue;
-          
-          const codes = String(item.codeField).split(",").map(c => c.trim()).filter(Boolean);
-          
-          if (codes.length <= 1) {
-            // Single code — use stored qty and amount directly
-            const code = codes[0] || "";
-            if (code) {
-              savedEntries.push({
-                itemKey: item.key,
-                code,
-                qty: Number(item.qty),
-                rate: Number(item.rate),
-                amount: Number(item.amount),
-              });
-            }
-          } else {
-            // Multiple codes — distribute qty evenly, each line gets its own amount
-            const perCodeQty = Math.floor(Number(item.qty) / codes.length);
-            const remainder = Number(item.qty) % codes.length;
-            
-            for (let i = 0; i < codes.length; i++) {
-              const qty = perCodeQty + (i < remainder ? 1 : 0);
-              savedEntries.push({
-                itemKey: item.key,
-                code: codes[i],
-                qty,
-                rate: Number(item.rate),
-                amount: Number(item.rate) * qty,
-              });
-            }
-          }
-        }
-        
-        preview = buildReceiptLines({
-          receiptNumber: receiptData.receiptNumber,
-          heading: receiptData.heading ?? "",
-          timestamp: new Date(receiptData.timestamp),
-          entries: savedEntries,
-        });
-      }
+      preview = buildReceiptLines({
+        receiptNumber: receiptData.receiptNumber,
+        heading: receiptData.heading ?? "",
+        timestamp: new Date(receiptData.timestamp),
+        entries: toReceiptEntries(receiptData),
+      });
     } else {
       // Printing draft receipt - fetch next receipt number to display
       let nextNumber = "PENDING";
@@ -1228,11 +1454,11 @@ export function AppShell() {
       )}
 
       {currentPage === "sales" && session.role === "MASTER_ADMIN" && (
-        <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 max-w-4xl mx-auto shadow-2xl shadow-black/20">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-2xl font-semibold text-white">Sales Report</h2>
-              <p className="text-sm text-slate-400">View sales per counter for a specific date.</p>
+        <GlassCard className="max-w-5xl mx-auto" title="Sales Report" subtitle="Counter totals and full invoice history.">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid grid-cols-2 rounded-[1.2rem] border border-white/10 bg-white/5 p-1 text-sm font-semibold sm:w-72">
+              <button type="button" onClick={() => setSalesView("summary")} className={`rounded-[1rem] px-3 py-2 ${salesView === "summary" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>Counter Totals</button>
+              <button type="button" onClick={() => setSalesView("history")} className={`rounded-[1rem] px-3 py-2 ${salesView === "history" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>Sales History</button>
             </div>
             <div className="flex items-center gap-3">
               <label htmlFor="sales-date" className="text-sm text-slate-300 font-medium">Date:</label>
@@ -1245,29 +1471,103 @@ export function AppShell() {
               />
             </div>
           </div>
-          
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {isSalesLoading ? (
-              <div className="col-span-full py-8 text-center text-slate-400">Loading sales data...</div>
-            ) : salesData.length === 0 ? (
-              <div className="col-span-full py-8 text-center text-slate-400 rounded-2xl border border-white/5 bg-white/5">No sales recorded for this date.</div>
-            ) : (
-              salesData.map((sale, index) => (
-                <div key={index} className="flex items-center justify-between p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
-                  <span className="font-medium text-white">{sale.heading}</span>
-                  <span className="font-semibold text-amber-200">{formatCurrency(sale.total)}</span>
-                </div>
-              ))
-            )}
-          </div>
 
-          {!isSalesLoading && salesData.length > 0 && (
-            <div className="mt-8 flex items-center justify-between p-5 rounded-2xl bg-amber-300/10 border border-amber-300/20">
-              <span className="text-xl font-semibold text-amber-100">Grand Total</span>
-              <span className="text-2xl font-bold text-amber-300">{formatCurrency(grandTotal)}</span>
+          {salesView === "summary" ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {isSalesLoading ? (
+                  <div className="col-span-full py-8 text-center text-slate-400">Loading sales data...</div>
+                ) : salesData.length === 0 ? (
+                  <div className="col-span-full py-8 text-center text-slate-400 rounded-2xl border border-white/5 bg-white/5">No sales recorded for this date.</div>
+                ) : (
+                  salesData.map((sale, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
+                      <span className="font-medium text-white">{sale.heading}</span>
+                      <span className="font-semibold text-amber-200">{formatCurrency(sale.total)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {!isSalesLoading && salesData.length > 0 && (
+                <div className="mt-8 flex items-center justify-between p-5 rounded-2xl bg-amber-300/10 border border-amber-300/20">
+                  <span className="text-xl font-semibold text-amber-100">Grand Total</span>
+                  <span className="text-2xl font-bold text-amber-300">{formatCurrency(grandTotal)}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                <input
+                  value={salesReceiptSearch}
+                  onChange={(event) => setSalesReceiptSearch(event.target.value)}
+                  placeholder="Search by receipt no, counter, or admin"
+                  className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
+                />
+                <div className="flex items-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-slate-300">
+                  {getFilteredSalesHistory().length} receipts
+                </div>
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSalesSlotFilterId("all")}
+                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${salesSlotFilterId === "all" ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
+                >
+                  All Slots
+                </button>
+                {RESOLVED_SALES_SLOTS.map((slot) => (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    onClick={() => setSalesSlotFilterId(slot.id)}
+                    className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${salesSlotFilterId === slot.id ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
+                  >
+                    {slot.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                {getFilteredSalesHistory().length === 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No receipts match your filters.</div>
+                ) : (
+                  getFilteredSalesHistory().map((receipt) => (
+                    <div key={receipt.id} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                      <div>
+                        <div className="font-semibold text-white">{receipt.receiptNumber} • {receipt.heading ?? "Counter"}</div>
+                        <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.admin.name}</div>
+                        <div className="mt-1 text-sm font-semibold text-emerald-300">{formatCurrency(receipt.totalAmount)}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLastReceipt(receipt);
+                            setCurrentPage("dashboard");
+                            setPosScreen("receipt");
+                          }}
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
+                        >
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void downloadReceiptImage(receipt)}
+                          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-emerald-950"
+                        >
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
-        </div>
+        </GlassCard>
       )}
 
       {currentPage === "dashboard" && renderMobileDashboard()}
@@ -1285,12 +1585,60 @@ export function AppShell() {
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
+                <button onClick={() => setCurrentPage("inventory")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Inventory</button>
+                <button onClick={() => setCurrentPage("customers")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Customers</button>
+                <button onClick={() => setCurrentPage("payments")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Payments</button>
+                <button onClick={() => setCurrentPage("staff")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Staff</button>
               </>
             ) : (
               <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
             )}
           </div>
         </div>
+      )}
+
+      {currentPage === "inventory" && (
+        <GlassCard title="Inventory" subtitle="Product stock, pricing, and low-stock alerts." className="max-w-4xl mx-auto">
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatTile label="Total SKUs" value="120" tone="slate" />
+            <StatTile label="Low Stock" value="8" tone="amber" />
+            <StatTile label="Out Of Stock" value="2" tone="emerald" />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Inventory module scaffold added. Hook this to product APIs next.</div>
+        </GlassCard>
+      )}
+
+      {currentPage === "customers" && (
+        <GlassCard title="Customers" subtitle="Profiles, purchase history, and loyalty metrics." className="max-w-4xl mx-auto">
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatTile label="Active Customers" value="412" tone="slate" />
+            <StatTile label="New This Month" value="38" tone="emerald" />
+            <StatTile label="Returning Rate" value="67%" tone="amber" />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Customer module scaffold added. Ready for CRM endpoints.</div>
+        </GlassCard>
+      )}
+
+      {currentPage === "payments" && (
+        <GlassCard title="Payments" subtitle="Payment methods, settlement status, and reconciliation." className="max-w-4xl mx-auto">
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatTile label="UPI" value={formatCurrency(grandTotal * 0.45)} tone="emerald" />
+            <StatTile label="Cash" value={formatCurrency(grandTotal * 0.35)} tone="slate" />
+            <StatTile label="Card" value={formatCurrency(grandTotal * 0.2)} tone="amber" />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Payment analytics scaffold added. Integrate ledger sync next.</div>
+        </GlassCard>
+      )}
+
+      {currentPage === "staff" && (
+        <GlassCard title="Staff Management" subtitle="Shift overview, performance, and access controls." className="max-w-4xl mx-auto">
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatTile label="Active Staff" value={String(users.length + 1)} tone="slate" />
+            <StatTile label="Counters Live" value={String(Math.max(1, salesData.length))} tone="emerald" />
+            <StatTile label="Avg Sales / Counter" value={formatCurrency(salesData.length ? grandTotal / salesData.length : 0)} tone="amber" />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Staff module scaffold added. Add role permissions and shift logs next.</div>
+        </GlassCard>
       )}
 
       <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur">
