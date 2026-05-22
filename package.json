@@ -10,14 +10,19 @@
         "lint": "eslint",
         "db:push": "prisma db push",
         "db:seed": "tsx prisma/seed.ts",
-        "prisma:generate": "prisma generate"
+        "prisma:generate": "prisma generate",
+        "android:add": "cap add android",
+        "android:sync": "cap sync android",
+        "android:open": "cap open android"
     },
     "prisma": {
         "seed": "tsx prisma/seed.ts"
     },
     "dependencies": {
-        "@tailwindcss/postcss": "^4",
+        "@capacitor/android": "^7.6.5",
+        "@capacitor/core": "^7.6.5",
         "@prisma/client": "^6.16.0",
+        "@tailwindcss/postcss": "^4",
         "bcryptjs": "^3.0.3",
         "jose": "^6.2.3",
         "jspdf": "^4.2.1",
@@ -29,6 +34,7 @@
         "zod": "^4.3.6"
     },
     "devDependencies": {
+        "@capacitor/cli": "^7.6.5",
         "@types/node": "^20",
         "@types/react": "^19",
         "@types/react-dom": "^19",

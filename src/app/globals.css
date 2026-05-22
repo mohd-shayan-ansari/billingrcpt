@@ -24,6 +24,7 @@ body {
     color: var(--foreground);
     font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 button,
@@ -43,6 +44,10 @@ select {
     font-family: var(--font-geist-mono), "Courier New", monospace;
     color: #0f172a;
     background: #fff;
+}
+
+.mobile-shell {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
 }
 
 .print-only {

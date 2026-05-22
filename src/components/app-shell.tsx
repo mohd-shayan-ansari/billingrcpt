@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { DEFAULT_MASTER_CREDENTIALS, DEFAULT_RATES, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
+import { DEFAULT_MASTER_CREDENTIALS, DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 
 type SessionUser = {
@@ -79,6 +79,19 @@ function sanitizeCodeInput(itemKey: (typeof RECEIPT_KEYS)[number], value: string
   return itemKey === "result" ? digits.slice(0, 2) : digits.slice(0, 1);
 }
 
+const CATEGORY_TABS = [
+  { key: "all", label: "All" },
+  { key: "andar", label: "AN" },
+  { key: "bahar", label: "BH" },
+  { key: "result", label: "RT" },
+] as const;
+
+const POS_CODE_GRID: Record<(typeof RECEIPT_KEYS)[number], string[]> = {
+  andar: Array.from({ length: 10 }, (_, index) => String(index)),
+  bahar: Array.from({ length: 10 }, (_, index) => String(index)),
+  result: Array.from({ length: 100 }, (_, index) => String(index).padStart(2, "0")),
+};
+
 export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +107,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
@@ -103,6 +116,9 @@ export function AppShell() {
   const [isSalesLoading, setIsSalesLoading] = useState(false);
   const [codeSelectionOpen, setCodeSelectionOpen] = useState<"andar" | "bahar" | "result" | null>(null);
   const [codeQuantities, setCodeQuantities] = useState<Record<string, Record<string, number>>>({ andar: {}, bahar: {}, result: {} });
+  const [activeMode, setActiveMode] = useState<"service" | "simple">("service");
+  const [activeCategory, setActiveCategory] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
+  const [cartOpen, setCartOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -125,9 +141,9 @@ export function AppShell() {
   useEffect(() => {
     let active = true;
     if (currentPage === "sales" && session?.role === "MASTER_ADMIN") {
-      setIsSalesLoading(true);
       void (async () => {
         try {
+          setIsSalesLoading(true);
           const resp = await fetch(`/api/sales?date=${salesDate}`, { cache: "no-store" });
           if (resp.ok) {
             const data = await resp.json();
@@ -438,6 +454,278 @@ export function AppShell() {
       }
     }
     return total;
+  }
+
+  function getSelectedCount() {
+    let total = 0;
+    for (const category of RECEIPT_KEYS) {
+      const catMap = codeQuantities[category] || {};
+      for (const qty of Object.values(catMap)) {
+        total += qty;
+      }
+    }
+    return total;
+  }
+
+  function getVisibleCatalogCategories() {
+    if (activeCategory === "all") {
+      return RECEIPT_KEYS;
+    }
+
+    return [activeCategory];
+  }
+
+  function getSelectedQuantity(category: (typeof RECEIPT_KEYS)[number], code: string) {
+    return codeQuantities[category]?.[code] || 0;
+  }
+
+  function incrementCodeQuantity(category: (typeof RECEIPT_KEYS)[number], code: string) {
+    adjustCodeQty(category, code, 1);
+    setCartOpen(true);
+  }
+
+  function renderMobileDashboard() {
+    const currentSession = session;
+    if (!currentSession) {
+      return null;
+    }
+
+    const selectedItems = getSelectedItemsSummary();
+    const selectedCount = getSelectedCount();
+    const visibleCategories = getVisibleCatalogCategories();
+
+    return (
+      <div className="space-y-4 pb-28">
+        <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm uppercase tracking-[0.35em] text-slate-500">P...</div>
+              <h2 className="mt-1 text-2xl font-semibold text-white">{ROLE_LABELS[currentSession.role]} console</h2>
+              <p className="text-sm text-slate-400">Mobile POS mode for billing and counter entry.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((current) => !current)}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
+                aria-label="Open menu"
+              >
+                ☰
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage("sales")}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
+                aria-label="Reports"
+              >
+                ▦
+              </button>
+            </div>
+          </div>
+
+          {menuOpen && currentSession.role === "MASTER_ADMIN" && (
+            <div className="mt-4 grid gap-2 rounded-3xl border border-white/10 bg-slate-950/95 p-2 text-sm text-white">
+              <button onClick={() => { setCurrentPage("rates"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Change Rates</button>
+              <button onClick={() => { setCurrentPage("sales"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Reports</button>
+              <button onClick={() => { setCurrentPage("admins"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Counter Admins</button>
+              <button onClick={() => { setCurrentPage("update-password"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Update Password</button>
+            </div>
+          )}
+
+          <div className="mt-4 grid grid-cols-2 rounded-[1.75rem] border border-white/10 bg-white/5 p-1 text-sm font-semibold">
+            <button
+              type="button"
+              onClick={() => setActiveMode("simple")}
+              className={`rounded-[1.5rem] px-4 py-3 transition ${activeMode === "simple" ? "bg-white text-slate-950" : "text-slate-300"}`}
+            >
+              Simple
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode("service")}
+              className={`rounded-[1.5rem] px-4 py-3 transition ${activeMode === "service" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}
+            >
+              Service
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {CATEGORY_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveCategory(tab.key)}
+                className={`rounded-full border px-4 py-3 text-sm font-semibold transition ${activeCategory === tab.key ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-slate-500/60 bg-white/5 text-slate-300"}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {activeMode === "simple" ? (
+          <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Create receipt</h3>
+                <p className="text-sm text-slate-400">Manual entry view for quick edits.</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-right text-sm text-slate-300">
+                Total
+                <div className="text-xl font-semibold text-emerald-300">{formatCurrency(calculateTotal())}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <label className="block space-y-2 text-sm text-slate-300">
+                <span>Heading</span>
+                {currentSession.role === "MASTER_ADMIN" ? (
+                  <select value={heading} onChange={(event) => setHeading(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none">
+                    {Array.from({ length: 15 }).map((_, index) => {
+                      const counter = String(index + 1).padStart(2, "0");
+                      return <option key={counter} value={`Counter ${counter}`}>Counter {counter}</option>;
+                    })}
+                  </select>
+                ) : (
+                  <input value={heading} disabled className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white opacity-70" />
+                )}
+              </label>
+
+              {entries.map((entry, index) => (
+                <div key={entry.id} className="grid gap-3 rounded-[1.5rem] border border-white/10 bg-white/5 p-3">
+                  <div className="grid grid-cols-[1fr_auto] gap-3">
+                    <select value={entry.itemKey} onChange={(event) => updateEntry(entry.id, { itemKey: event.target.value as (typeof RECEIPT_KEYS)[number] })} className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none">
+                      <option value="andar">Andar</option>
+                      <option value="bahar">Bahar</option>
+                      <option value="result">Result</option>
+                    </select>
+                    <button type="button" onClick={() => removeEntryRow(entry.id)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">Remove</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                    <input value={entry.code} onChange={(event) => updateEntry(entry.id, { code: event.target.value })} className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Code" />
+                    <input type="number" min={0} value={entry.qty || ""} onChange={(event) => updateEntry(entry.id, { qty: Number(event.target.value) || 0 })} className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Qty" />
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-right text-slate-300 md:col-span-1">{formatCurrency(computeEntryAmount(entry))}</div>
+                  </div>
+                  <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Line {index + 1}</div>
+                </div>
+              ))}
+
+              <div className="flex gap-3">
+                <button type="button" onClick={addEntryRow} className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white">Add line</button>
+                <button type="button" onClick={saveAndPrint} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">Save &amp; Print</button>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <>
+            <section className="space-y-4">
+              {visibleCategories.map((category) => (
+                <div key={category} className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-xl font-semibold text-white">{ITEM_LABELS[category]}</h3>
+                      <p className="text-sm text-slate-400">Tap a card to add it to the cart.</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Rate <span className="font-semibold text-emerald-300">{formatCurrency(rates[category])}</span></div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                    {POS_CODE_GRID[category].map((code) => {
+                      const qty = getSelectedQuantity(category, code);
+                      const isSelected = qty > 0;
+                      return (
+                        <button
+                          key={`${category}-${code}`}
+                          type="button"
+                          onClick={() => incrementCodeQuantity(category, code)}
+                          className={`relative aspect-[0.92] rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
+                        >
+                          <div className="flex h-full flex-col justify-between">
+                            <div className="rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 p-4 text-center text-emerald-300">◻</div>
+                            <div>
+                              <div className="font-semibold text-white">{ITEM_LABELS[category].slice(0, 2).toUpperCase()}-{code}</div>
+                              <div className="text-sm font-semibold text-emerald-300">{formatCurrency(rates[category])}</div>
+                            </div>
+                          </div>
+                          {isSelected ? <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-400 px-1 text-xs font-bold text-slate-950">{qty}</span> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <button
+              type="button"
+              onClick={() => setCartOpen(true)}
+              className="fixed bottom-20 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-2xl shadow-emerald-500/20"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
+                <span className="text-base">View Cart — {formatCurrency(calculateTotalFromQuantities())}</span>
+                <span>›</span>
+              </div>
+            </button>
+
+            {cartOpen && (
+              <div className="fixed inset-0 z-40 bg-black/60 px-3 pb-4 pt-24 backdrop-blur-sm" onClick={(event) => { if (event.target === event.currentTarget) setCartOpen(false); }}>
+                <div className="mx-auto flex max-h-[78vh] w-full max-w-md flex-col rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 shadow-2xl shadow-black/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-2xl font-semibold text-white">Cart</h3>
+                      <p className="text-sm text-slate-400">Adjust quantities before charging.</p>
+                    </div>
+                    <button type="button" onClick={() => setCartOpen(false)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+                  </div>
+
+                  <div className="mt-4 flex-1 space-y-3 overflow-y-auto">
+                    {selectedItems.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No items selected yet.</div>
+                    ) : (
+                      selectedItems.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div>
+                            <div className="text-lg font-semibold text-white">{item.label}</div>
+                            <div className="text-sm text-slate-400">Qty {item.qty}</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button type="button" onClick={() => adjustCodeQty(item.label.startsWith("AN") ? "andar" : item.label.startsWith("BH") ? "bahar" : "result", item.label.split("-")[1], -1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl text-white">−</button>
+                            <div className="min-w-10 text-center text-lg font-semibold text-white">{item.qty}</div>
+                            <button type="button" onClick={() => adjustCodeQty(item.label.startsWith("AN") ? "andar" : item.label.startsWith("BH") ? "bahar" : "result", item.label.split("-")[1], 1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-xl font-semibold text-slate-950">+</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+                    <div className="flex items-center justify-between text-sm text-slate-300"><span>Subtotal</span><span>{formatCurrency(calculateTotalFromQuantities())}</span></div>
+                    <div className="flex items-center justify-between text-2xl font-semibold text-white"><span>TOTAL</span><span className="text-emerald-300">{formatCurrency(calculateTotalFromQuantities())}</span></div>
+                    <button type="button" onClick={saveFromQuantities} className="w-full rounded-[1.5rem] bg-red-500 px-4 py-4 text-lg font-semibold text-white">Charge {formatCurrency(calculateTotalFromQuantities())}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-white">Receipt preview</h3>
+              <p className="text-sm text-slate-400">Generated from the current draft.</p>
+            </div>
+            <button type="button" onClick={() => downloadReceiptImage(lastReceipt ?? undefined)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Print / Save</button>
+          </div>
+          <div className="mt-4 rounded-3xl border border-slate-300 bg-white p-4 text-slate-900">
+            <div className="space-y-1 font-mono text-[11px] leading-5">
+              {preview.lines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   function getSelectedItemsSummary() {
@@ -982,208 +1270,43 @@ export function AppShell() {
         </div>
       )}
 
-      {currentPage === "dashboard" && (
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="space-y-6">
-          <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-2xl shadow-black/20">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-semibold text-white">Create receipt</h2>
-                <p className="text-sm text-slate-400">Select a category, pick codes & quantities, then save.</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right text-sm text-slate-300">Total<div className="text-2xl font-semibold text-amber-200">{formatCurrency(calculateTotalFromQuantities())}</div></div>
-            </div>
+      {currentPage === "dashboard" && renderMobileDashboard()}
 
-            <div className="mt-6 space-y-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-              <label className="block space-y-2 text-sm text-slate-300">
-                <span>Counter heading</span>
-                {session.role === "MASTER_ADMIN" ? (
-                  <select
-                    value={heading}
-                    onChange={(event) => setHeading(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-amber-300"
-                  >
-                    {Array.from({ length: 15 }).map((_, i) => {
-                      const num = String(i + 1).padStart(2, "0");
-                      return <option key={num} value={`Counter ${num}`}>Counter {num}</option>;
-                    })}
-                  </select>
-                ) : (
-                  <input value={heading} disabled className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none disabled:opacity-60 disabled:cursor-not-allowed" />
-                )}
-              </label>
-
-              {/* 3 Category Buttons */}
-              <div className="grid grid-cols-3 gap-3 mt-4">
-                <button
-                  onClick={() => setCodeSelectionOpen("andar")}
-                  className="relative overflow-hidden rounded-2xl border-2 border-amber-400/30 bg-gradient-to-br from-amber-500/20 to-amber-600/10 px-4 py-6 text-center font-bold text-amber-200 transition-all duration-200 hover:scale-[1.03] hover:border-amber-400/60 hover:shadow-lg hover:shadow-amber-500/20 active:scale-[0.98]"
-                >
-                  <div className="text-lg tracking-wide">Andar</div>
-                  {Object.keys(codeQuantities.andar || {}).length > 0 && (
-                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-xs font-bold text-slate-950">{Object.keys(codeQuantities.andar).length}</div>
-                  )}
-                </button>
-                <button
-                  onClick={() => setCodeSelectionOpen("bahar")}
-                  className="relative overflow-hidden rounded-2xl border-2 border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 px-4 py-6 text-center font-bold text-emerald-200 transition-all duration-200 hover:scale-[1.03] hover:border-emerald-400/60 hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98]"
-                >
-                  <div className="text-lg tracking-wide">Bahar</div>
-                  {Object.keys(codeQuantities.bahar || {}).length > 0 && (
-                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-xs font-bold text-slate-950">{Object.keys(codeQuantities.bahar).length}</div>
-                  )}
-                </button>
-                <button
-                  onClick={() => setCodeSelectionOpen("result")}
-                  className="relative overflow-hidden rounded-2xl border-2 border-violet-400/30 bg-gradient-to-br from-violet-500/20 to-violet-600/10 px-4 py-6 text-center font-bold text-violet-200 transition-all duration-200 hover:scale-[1.03] hover:border-violet-400/60 hover:shadow-lg hover:shadow-violet-500/20 active:scale-[0.98]"
-                >
-                  <div className="text-lg tracking-wide">Result</div>
-                  {Object.keys(codeQuantities.result || {}).length > 0 && (
-                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-violet-400 text-xs font-bold text-slate-950">{Object.keys(codeQuantities.result).length}</div>
-                  )}
-                </button>
-              </div>
-
-              {/* Selected Items Summary */}
-              {getSelectedItemsSummary().length > 0 && (
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">Selected Items</div>
-                  <div className="flex flex-wrap gap-2">
-                    {getSelectedItemsSummary().map((item) => (
-                      <div key={item.label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm">
-                        <span className="font-semibold text-white">{item.label}</span>
-                        <span className="text-slate-400">×{item.qty}</span>
-                        <span className="text-amber-200">{formatCurrency(item.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button onClick={saveFromQuantities} className="w-full rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Save</button>
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-300">
-              <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Grand total</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{formatCurrency(calculateTotalFromQuantities())}</div>
-            </div>
+      {currentPage === "settings" && (
+        <div className="space-y-4 rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+          <div>
+            <h2 className="text-2xl font-semibold text-white">Settings</h2>
+            <p className="text-sm text-slate-400">Manage account, rates, and admin tools.</p>
           </div>
-
-          {/* Code Selection Overlay */}
-          {codeSelectionOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setCodeSelectionOpen(null); }}>
-              <div className="relative mx-4 w-full max-w-lg max-h-[85vh] flex flex-col rounded-[2rem] border border-white/15 bg-slate-950/95 shadow-2xl shadow-black/50">
-                <div className="flex items-center justify-between p-5 pb-3">
-                  <h3 className="text-xl font-bold text-white">
-                    {codeSelectionOpen === "andar" ? "Andar" : codeSelectionOpen === "bahar" ? "Bahar" : "Result"} — Select Codes
-                  </h3>
-                  <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-400">
-                    Rate: <span className="text-amber-200 font-semibold">{formatCurrency(rates[codeSelectionOpen])}</span>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-5 pb-3" style={{ maxHeight: "60vh" }}>
-                  <div className={`grid gap-2 ${codeSelectionOpen === "result" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
-                    {(codeSelectionOpen === "result"
-                      ? Array.from({ length: 100 }, (_, i) => String(i).padStart(2, "0"))
-                      : Array.from({ length: 10 }, (_, i) => String(i))
-                    ).map((code) => {
-                      const qty = codeQuantities[codeSelectionOpen]?.[code] || 0;
-                      return (
-                        <div key={code} className={`flex items-center justify-between rounded-xl border px-4 py-2.5 transition-colors ${qty > 0 ? "border-amber-400/30 bg-amber-400/10" : "border-white/10 bg-white/5"}`}>
-                          <span className={`font-mono text-lg font-bold ${qty > 0 ? "text-amber-200" : "text-slate-300"}`}>{code}</span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => adjustCodeQty(codeSelectionOpen!, code, -1)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-slate-950/80 text-lg font-bold text-white transition hover:border-red-400/50 hover:bg-red-400/20 hover:text-red-200 active:scale-90"
-                            >−</button>
-                            <input
-                              type="number"
-                              value={qty || ""}
-                              onChange={(e) => setCodeQty(codeSelectionOpen!, code, e.target.value === "" ? 0 : Number(e.target.value))}
-                              className="w-16 rounded-xl border border-white/10 bg-slate-950/80 px-2 py-1.5 text-center font-mono text-lg font-semibold text-white outline-none transition focus:border-amber-300"
-                              placeholder="0"
-                            />
-                            <button
-                              onClick={() => adjustCodeQty(codeSelectionOpen!, code, 1)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-slate-950/80 text-lg font-bold text-white transition hover:border-emerald-400/50 hover:bg-emerald-400/20 hover:text-emerald-200 active:scale-90"
-                            >+</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 border-t border-white/10 p-5 pt-4">
-                  <button
-                    onClick={() => setCodeSelectionOpen(null)}
-                    className="flex-1 rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3 font-semibold text-white transition hover:border-amber-300/60 hover:text-amber-100"
-                  >Back</button>
-                  <button
-                    onClick={() => setCodeSelectionOpen(null)}
-                    className="flex-1 rounded-2xl bg-amber-300 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-200"
-                  >Done</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-semibold text-white">Receipt history</h2>
-                <p className="text-sm text-slate-400">Search by receipt number, heading, or admin.</p>
-              </div>
-              <form onSubmit={runSearch} className="flex gap-2">
-                <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-56 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Search receipts" />
-                <button className="rounded-2xl bg-amber-300 px-4 py-3 font-semibold text-slate-950">Go</button>
-              </form>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {receipts.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-300">No receipts found.</div>
-              ) : (
-                receipts.map((receipt) => (
-                  <div key={receipt.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="font-semibold text-white">{receipt.receiptNumber}</div>
-                        <div className="text-sm text-slate-400">{receipt.heading ?? "No heading"}</div>
-                        <div className="text-sm text-slate-500">{formatDate(receipt.timestamp)} · {receipt.admin.name}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-semibold text-amber-200">{formatCurrency(receipt.totalAmount)}</div>
-                        <button onClick={() => downloadReceiptImage(receipt)} className="mt-2 rounded-lg bg-blue-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-600">Download</button>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-2 text-sm text-slate-300 md:grid-cols-3">
-                      <div>Andar: {receipt.andarCode ?? "-"} x{receipt.andarQty}</div>
-                      <div>Bahar: {receipt.baharCode ?? "-"} x{receipt.baharQty}</div>
-                      <div>Result: {receipt.resultCode ?? "-"} x{receipt.resultQty}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {session.role === "MASTER_ADMIN" ? (
+              <>
+                <button onClick={() => setCurrentPage("rates")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Change Rates</button>
+                <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
+                <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
+                <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
+              </>
+            ) : (
+              <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
+            )}
           </div>
-        </section>
-
-        <aside className="space-y-6">
-          <div className="thermal-print overflow-hidden rounded-[2rem] border border-slate-300 bg-white p-4 shadow-2xl shadow-black/30">
-            <div className="space-y-1 text-center text-xs uppercase tracking-[0.25em] text-slate-500">Preview</div>
-            <div className="mt-3 whitespace-pre border-t border-dashed border-slate-300 pt-3 font-mono text-[11px] leading-5 text-slate-900">
-              {preview.lines.map((line, index) => (
-                <div key={`${line}-${index}`}>{line}</div>
-              ))}
-            </div>
-          </div>
-        </aside>
-      </div>
+        </div>
       )}
+
+      <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur">
+        <button onClick={() => setCurrentPage("dashboard")} className={`flex flex-1 flex-col items-center gap-1 rounded-[1rem] px-2 py-2 text-xs font-medium ${currentPage === "dashboard" ? "text-emerald-300" : "text-slate-400"}`}>
+          <span className="text-lg">▣</span>
+          Dashboard
+        </button>
+        <button onClick={() => setCurrentPage("sales")} className={`flex flex-1 flex-col items-center gap-1 rounded-[1rem] px-2 py-2 text-xs font-medium ${currentPage === "sales" ? "text-emerald-300" : "text-slate-400"}`}>
+          <span className="text-lg">▤</span>
+          Reports
+        </button>
+        <button onClick={() => setCurrentPage("settings")} className={`flex flex-1 flex-col items-center gap-1 rounded-[1rem] px-2 py-2 text-xs font-medium ${currentPage === "settings" ? "text-emerald-300" : "text-slate-400"}`}>
+          <span className="text-lg">⚙</span>
+          Settings
+        </button>
+      </nav>
     </main>
   );
 }

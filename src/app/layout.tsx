@@ -15,6 +15,18 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Billing Lottery",
   description: "Thermal receipt generator with master and counter admin controls",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Billing Lottery",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
