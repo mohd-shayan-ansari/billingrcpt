@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { DEFAULT_MASTER_CREDENTIALS, DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
+import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
 
@@ -142,7 +142,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "inventory" | "customers" | "payments" | "staff">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
@@ -154,10 +154,11 @@ export function AppShell() {
   const [activeMode, setActiveMode] = useState<"service" | "simple">("service");
   const [activeCategory, setActiveCategory] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
   const [posScreen, setPosScreen] = useState<"catalog" | "cart" | "receipt">("catalog");
-  const [selectedTimeSlotId, setSelectedTimeSlotId] = useState<string>("all");
   const [salesView, setSalesView] = useState<"summary" | "history">("summary");
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>("all");
+  const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
+  const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -534,31 +535,6 @@ export function AppShell() {
     return match;
   }
 
-  function summarizeItemsFromReceipts(records: ReceiptRecord[]) {
-    const codePrefix = { andar: "AN", bahar: "BH", result: "RT" } as const;
-    const items = new Map<string, { label: string; qty: number; amount: number }>();
-
-    for (const receipt of records) {
-      const entriesForReceipt = toReceiptEntries(receipt);
-      for (const entry of entriesForReceipt) {
-        const key = `${entry.itemKey}-${entry.code}`;
-        const current = items.get(key);
-        if (current) {
-          current.qty += entry.qty;
-          current.amount += entry.amount;
-        } else {
-          items.set(key, {
-            label: `${codePrefix[entry.itemKey]}-${entry.code}`,
-            qty: entry.qty,
-            amount: entry.amount,
-          });
-        }
-      }
-    }
-
-    return Array.from(items.values()).sort((a, b) => b.qty - a.qty || b.amount - a.amount);
-  }
-
   function getDateOnly(value: string) {
     const date = new Date(value);
     const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -592,28 +568,16 @@ export function AppShell() {
     const selectedCount = getSelectedCount();
     const visibleCategories = getVisibleCatalogCategories();
     const total = calculateTotalFromQuantities();
-    const filteredReceipts = selectedTimeSlotId === "all"
-      ? receipts
-      : receipts.filter((receipt) => getTimeSlotIdForTimestamp(receipt.timestamp) === selectedTimeSlotId);
-    const slotItemSummary = summarizeItemsFromReceipts(filteredReceipts);
     const today = new Date();
     const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const todaysReceipts = receipts.filter((receipt) => getDateOnly(receipt.timestamp) === todayDate);
     const todayTotal = todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
-    const averageTicket = todaysReceipts.length ? Math.round(todayTotal / todaysReceipts.length) : 0;
-    const latestReceiptPreview = lastReceipt ? buildReceiptLines({
-      receiptNumber: lastReceipt.receiptNumber,
-      heading: lastReceipt.heading ?? heading,
-      timestamp: new Date(lastReceipt.timestamp),
-      entries: toReceiptEntries(lastReceipt),
-    }) : null;
 
     return (
       <div className="space-y-4 pb-36">
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="Today Receipts" value={String(todaysReceipts.length)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
-          <StatTile label="Avg Ticket" value={formatCurrency(averageTicket)} tone="amber" />
         </div>
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
@@ -826,133 +790,30 @@ export function AppShell() {
                     <div className="flex items-center justify-between text-sm text-slate-300"><span>Subtotal</span><span>{formatCurrency(total)}</span></div>
                     <div className="flex items-center justify-between text-2xl font-semibold text-white"><span>Total</span><span className="text-emerald-300">{formatCurrency(total)}</span></div>
                     <div className="grid grid-cols-2 gap-3">
-                      <button type="button" onClick={() => saveFromQuantities(false)} className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Save Only</button>
-                      <button type="button" onClick={() => saveFromQuantities(true)} className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white">Charge {formatCurrency(total)}</button>
+                      <button
+                        type="button"
+                        onClick={() => saveFromQuantities(false)}
+                        disabled={receiptActionLoading !== null}
+                        className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        {receiptActionLoading === "save" ? "Saving..." : "Save Only"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveFromQuantities(true)}
+                        disabled={receiptActionLoading !== null}
+                        className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        {receiptActionLoading === "charge" ? "Charging..." : `Charge ${formatCurrency(total)}`}
+                      </button>
                     </div>
                   </div>
-                </div>
-              ) : null}
-
-              {posScreen === "receipt" ? (
-                <div className="rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 shadow-2xl shadow-black/40">
-                  <div className="text-center">
-                    <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400/20 text-3xl text-emerald-300">✓</div>
-                    <h3 className="text-2xl font-semibold text-white">Payment Successful</h3>
-                    <p className="text-sm text-slate-400">Receipt ready for print and share.</p>
-                  </div>
-                  <div className="mt-4 rounded-3xl border border-slate-300 bg-white p-4 text-slate-900">
-                    <div className="space-y-1 font-mono text-[11px] leading-5">
-                      {(latestReceiptPreview?.lines ?? preview.lines).map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button type="button" onClick={() => downloadReceiptImage(lastReceipt ?? undefined)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Send Digital</button>
-                    <button type="button" onClick={() => downloadReceiptImage(lastReceipt ?? undefined)} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Print Receipt</button>
-                  </div>
-                  <button type="button" onClick={() => setPosScreen("catalog")} className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">New Transaction</button>
                 </div>
               ) : null}
             </section>
           </>
         )}
 
-        <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Receipt preview</h3>
-              <p className="text-sm text-slate-400">Generated from the current draft.</p>
-            </div>
-            <button type="button" onClick={() => downloadReceiptImage(lastReceipt ?? undefined)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Print / Save</button>
-          </div>
-          <div className="mt-4 rounded-3xl border border-slate-300 bg-white p-4 text-slate-900">
-            <div className="space-y-1 font-mono text-[11px] leading-5">
-              {preview.lines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Past receipts</h3>
-              <p className="text-sm text-slate-400">Open or download any saved receipt.</p>
-            </div>
-            <button type="button" onClick={() => void refreshReceipts()} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Refresh</button>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Time Slots</div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button
-                type="button"
-                onClick={() => setSelectedTimeSlotId("all")}
-                className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${selectedTimeSlotId === "all" ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
-              >
-                All
-              </button>
-              {RESOLVED_SALES_SLOTS.map((slot) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  onClick={() => setSelectedTimeSlotId(slot.id)}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${selectedTimeSlotId === slot.id ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
-                >
-                  {slot.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Items Bought In Selection</div>
-              {slotItemSummary.length === 0 ? (
-                <div className="text-sm text-slate-400">No items found for this time slot.</div>
-              ) : (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {slotItemSummary.slice(0, 12).map((item) => (
-                    <div key={item.label} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2">
-                      <span className="text-sm font-semibold text-white">{item.label}</span>
-                      <span className="text-xs text-emerald-300">Qty {item.qty} • {formatCurrency(item.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {filteredReceipts.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No receipts yet.</div>
-            ) : (
-              filteredReceipts.map((receipt) => (
-                <div key={receipt.id} className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
-                  <div>
-                    <div className="font-semibold text-white">{receipt.receiptNumber} • {receipt.heading ?? "Counter"}</div>
-                    <div className="text-sm text-slate-400">{new Date(receipt.timestamp).toLocaleString("en-IN")} • {formatCurrency(receipt.totalAmount)}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLastReceipt(receipt);
-                        setPosScreen("receipt");
-                      }}
-                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
-                    >
-                      Open
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void downloadReceiptImage(receipt)}
-                      className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-emerald-950"
-                    >
-                      Download
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
       </div>
     );
   }
@@ -978,36 +839,42 @@ export function AppShell() {
   }
 
   async function saveFromQuantities(autoDownload = true) {
+    setReceiptActionLoading(autoDownload ? "charge" : "save");
     setMessage(null);
-    const draftEntries = codeQuantitiesToEntries();
-    if (draftEntries.length === 0) {
-      setMessage("Please select at least one code with quantity");
-      return;
-    }
 
-    const response = await fetch("/api/receipts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        heading,
-        entries: draftEntries.map((entry) => ({ itemKey: entry.itemKey, code: entry.code, qty: entry.qty })),
-      }),
-    });
+    try {
+      const draftEntries = codeQuantitiesToEntries();
+      if (draftEntries.length === 0) {
+        setMessage("Please select at least one code with quantity");
+        return;
+      }
 
-    const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
-    if (!response.ok || !data.receipt) {
-      setMessage(data.error ?? "Unable to create receipt");
-      return;
-    }
+      const response = await fetch("/api/receipts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          heading,
+          entries: draftEntries.map((entry) => ({ itemKey: entry.itemKey, code: entry.code, qty: entry.qty })),
+        }),
+      });
 
-    setLastReceipt(data.receipt);
-    setCodeQuantities({ andar: {}, bahar: {}, result: {} });
-    setPosScreen("receipt");
-    setMessage(`Receipt ${data.receipt.receiptNumber} created`);
-    await refreshReceipts();
+      const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
+      if (!response.ok || !data.receipt) {
+        setMessage(data.error ?? "Unable to create receipt");
+        return;
+      }
 
-    if (autoDownload) {
-      void downloadReceiptImage(data.receipt);
+      setLastReceipt(data.receipt);
+      setReceiptModalReceipt(data.receipt);
+      setCodeQuantities({ andar: {}, bahar: {}, result: {} });
+      setMessage(`Receipt ${data.receipt.receiptNumber} created`);
+      await refreshReceipts();
+
+      if (autoDownload) {
+        void downloadReceiptImage(data.receipt);
+      }
+    } finally {
+      setReceiptActionLoading(null);
     }
   }
 
@@ -1058,25 +925,9 @@ export function AppShell() {
     return savedEntries;
   }
 
-  function getPreviewFromQuantities() {
-    const draftEntries = codeQuantitiesToEntries();
-    return buildReceiptLines({
-      receiptNumber: nextReceiptNumber,
-      heading,
-      timestamp: new Date(),
-      entries: draftEntries
-        .map((entry) => {
-          if (!entry.code || !entry.qty) return null;
-          const rate = rates[entry.itemKey];
-          return { itemKey: entry.itemKey, code: entry.code, qty: entry.qty, rate, amount: rate * entry.qty };
-        })
-        .filter((e): e is NonNullable<typeof e> => e !== null),
-    });
-  }
-
-  async function downloadReceiptImage(receiptData?: ReceiptRecord) {
+  async function exportReceiptImage(receiptData?: ReceiptRecord, mode: "download" | "print" = "download") {
     let preview;
-    
+
     if (receiptData) {
       preview = buildReceiptLines({
         receiptNumber: receiptData.receiptNumber,
@@ -1085,7 +936,6 @@ export function AppShell() {
         entries: toReceiptEntries(receiptData),
       });
     } else {
-      // Printing draft receipt - fetch next receipt number to display
       let nextNumber = "PENDING";
       try {
         const resp = await fetch(`/api/receipts/next?heading=${encodeURIComponent(heading)}`, { cache: "no-store" });
@@ -1095,8 +945,8 @@ export function AppShell() {
             nextNumber = String(data.receiptNumber);
           }
         }
-      } catch (e) {
-        // ignore, fall back to PENDING
+      } catch {
+        // fall back to PENDING
       }
 
       preview = buildReceiptLines({
@@ -1121,75 +971,99 @@ export function AppShell() {
           .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
       });
     }
-    
+
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    if (ctx) {
-      const scale = 2; // 2x resolution for crisp, sharp text
-      const fontSize = 18;
-      const lineHeight = 24;
-      const padding = 28;
-      const fontFamily = '"Courier New", Courier, monospace';
-      const boldFont = `bold ${fontSize}px ${fontFamily}`;
-      
-      ctx.font = boldFont;
-      
-      let maxWidth = 0;
-      for (const line of preview.lines) {
-        const metrics = ctx.measureText(line);
-        if (metrics.width > maxWidth) {
-          maxWidth = metrics.width;
-        }
+    if (!ctx) {
+      return;
+    }
+
+    const scale = 1.5;
+    const fontSize = 12;
+    const lineHeight = 17;
+    const padding = 16;
+    const fontFamily = '"Courier New", Courier, monospace';
+    const font = `${fontSize}px ${fontFamily}`;
+
+    ctx.font = font;
+
+    let maxWidth = 0;
+    for (const line of preview.lines) {
+      const metrics = ctx.measureText(line);
+      if (metrics.width > maxWidth) {
+        maxWidth = metrics.width;
       }
-      
-      const logicalWidth = maxWidth + padding * 2;
-      const logicalHeight = preview.lines.length * lineHeight + padding * 2;
-      
-      canvas.width = logicalWidth * scale;
-      canvas.height = logicalHeight * scale;
-      canvas.style.width = `${logicalWidth}px`;
-      canvas.style.height = `${logicalHeight}px`;
-      
-      ctx.scale(scale, scale);
-      
-      // Crisp rendering settings
-      ctx.imageSmoothingEnabled = false;
-      
-      ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, logicalWidth, logicalHeight);
-      
-      ctx.font = boldFont;
-      ctx.fillStyle = "black";
-      ctx.textBaseline = "top";
-      
-      let y = padding;
-      for (const line of preview.lines) {
-        ctx.fillText(line, padding, y);
-        
-        // Underline the Time line
-        if (line.includes("Time:")) {
-          const textWidth = ctx.measureText(line.trimEnd()).width;
-          const trimmedLine = line.trimStart();
-          const leadingSpaces = line.length - trimmedLine.length;
-          const offsetX = ctx.measureText(line.substring(0, leadingSpaces)).width;
-          const underlineY = y + fontSize + 2;
-          ctx.beginPath();
-          ctx.lineWidth = 1.5;
-          ctx.strokeStyle = "black";
-          ctx.moveTo(padding + offsetX, underlineY);
-          ctx.lineTo(padding + textWidth, underlineY);
-          ctx.stroke();
-        }
-        
-        y += lineHeight;
+    }
+
+    const logicalWidth = Math.max(240, Math.ceil(maxWidth + padding * 2));
+    const logicalHeight = preview.lines.length * lineHeight + padding * 2;
+
+    canvas.width = Math.ceil(logicalWidth * scale);
+    canvas.height = Math.ceil(logicalHeight * scale);
+    canvas.style.width = `${logicalWidth}px`;
+    canvas.style.height = `${logicalHeight}px`;
+
+    ctx.scale(scale, scale);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+    ctx.font = font;
+    ctx.fillStyle = "black";
+    ctx.textBaseline = "top";
+
+    let y = padding;
+    for (const line of preview.lines) {
+      ctx.fillText(line, padding, y);
+      if (line.includes("Time:")) {
+        const textWidth = ctx.measureText(line.trimEnd()).width;
+        const trimmedLine = line.trimStart();
+        const leadingSpaces = line.length - trimmedLine.length;
+        const offsetX = ctx.measureText(line.substring(0, leadingSpaces)).width;
+        const underlineY = y + fontSize + 1;
+        ctx.beginPath();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "black";
+        ctx.moveTo(padding + offsetX, underlineY);
+        ctx.lineTo(padding + textWidth, underlineY);
+        ctx.stroke();
       }
-      
-      const dataUrl = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      const receiptNum = receiptData ? receiptData.receiptNumber : preview.lines.find(l => l.includes('Recpt No'))?.split(': ')[1] || 'receipt';
-      a.download = `${receiptNum}.png`;
-      a.click();
+
+      y += lineHeight;
+    }
+
+    const dataUrl = canvas.toDataURL("image/png");
+    const receiptNum = receiptData ? receiptData.receiptNumber : preview.lines.find((line) => line.includes("Recpt No"))?.split(": ")[1] || "receipt";
+
+    if (mode === "print") {
+      const printWindow = window.open("", "_blank", "noopener,noreferrer,width=420,height=720");
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(`<!doctype html><html><head><title>${receiptNum}</title><style>html,body{margin:0;padding:0;background:#fff}img{display:block;width:100%;height:auto}</style></head><body><img src="${dataUrl}" alt="${receiptNum}" onload="setTimeout(() => { window.print(); }, 200)" /></body></html>`);
+        printWindow.document.close();
+        printWindow.focus();
+        return;
+      }
+    }
+
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `${receiptNum}.png`;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function downloadReceiptImage(receiptData?: ReceiptRecord) {
+    await exportReceiptImage(receiptData, "download");
+  }
+
+  async function printReceiptImage(receiptData?: ReceiptRecord) {
+    setReceiptActionLoading("print");
+    try {
+      await exportReceiptImage(receiptData, "print");
+    } finally {
+      setReceiptActionLoading(null);
     }
   }
 
@@ -1333,8 +1207,6 @@ export function AppShell() {
       </main>
     );
   }
-
-  const preview = getPreviewFromQuantities();
 
   return (
     <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
@@ -1545,9 +1417,7 @@ export function AppShell() {
                         <button
                           type="button"
                           onClick={() => {
-                            setLastReceipt(receipt);
-                            setCurrentPage("dashboard");
-                            setPosScreen("receipt");
+                            setReceiptModalReceipt(receipt);
                           }}
                           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
                         >
@@ -1585,10 +1455,6 @@ export function AppShell() {
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
-                <button onClick={() => setCurrentPage("inventory")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Inventory</button>
-                <button onClick={() => setCurrentPage("customers")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Customers</button>
-                <button onClick={() => setCurrentPage("payments")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Payments</button>
-                <button onClick={() => setCurrentPage("staff")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Staff</button>
               </>
             ) : (
               <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
@@ -1597,49 +1463,47 @@ export function AppShell() {
         </div>
       )}
 
-      {currentPage === "inventory" && (
-        <GlassCard title="Inventory" subtitle="Product stock, pricing, and low-stock alerts." className="max-w-4xl mx-auto">
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatTile label="Total SKUs" value="120" tone="slate" />
-            <StatTile label="Low Stock" value="8" tone="amber" />
-            <StatTile label="Out Of Stock" value="2" tone="emerald" />
+      {receiptModalReceipt ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950 p-4 shadow-2xl shadow-black/50">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Receipt {receiptModalReceipt.receiptNumber}</h3>
+                <p className="text-sm text-slate-400">Preview, print, or download.</p>
+              </div>
+              <button type="button" onClick={() => setReceiptModalReceipt(null)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+            </div>
+            <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-3 text-slate-900">
+              <div className="space-y-1 font-mono text-[10px] leading-[1.35]">
+                {buildReceiptLines({
+                  receiptNumber: receiptModalReceipt.receiptNumber,
+                  heading: receiptModalReceipt.heading ?? heading,
+                  timestamp: new Date(receiptModalReceipt.timestamp),
+                  entries: toReceiptEntries(receiptModalReceipt),
+                }).lines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => void downloadReceiptImage(receiptModalReceipt)}
+                disabled={receiptActionLoading === "print"}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                Download
+              </button>
+              <button
+                type="button"
+                onClick={() => void printReceiptImage(receiptModalReceipt)}
+                disabled={receiptActionLoading === "print"}
+                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950 disabled:opacity-60"
+              >
+                {receiptActionLoading === "print" ? "Printing..." : "Print Receipt"}
+              </button>
+            </div>
           </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Inventory module scaffold added. Hook this to product APIs next.</div>
-        </GlassCard>
-      )}
-
-      {currentPage === "customers" && (
-        <GlassCard title="Customers" subtitle="Profiles, purchase history, and loyalty metrics." className="max-w-4xl mx-auto">
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatTile label="Active Customers" value="412" tone="slate" />
-            <StatTile label="New This Month" value="38" tone="emerald" />
-            <StatTile label="Returning Rate" value="67%" tone="amber" />
-          </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Customer module scaffold added. Ready for CRM endpoints.</div>
-        </GlassCard>
-      )}
-
-      {currentPage === "payments" && (
-        <GlassCard title="Payments" subtitle="Payment methods, settlement status, and reconciliation." className="max-w-4xl mx-auto">
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatTile label="UPI" value={formatCurrency(grandTotal * 0.45)} tone="emerald" />
-            <StatTile label="Cash" value={formatCurrency(grandTotal * 0.35)} tone="slate" />
-            <StatTile label="Card" value={formatCurrency(grandTotal * 0.2)} tone="amber" />
-          </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Payment analytics scaffold added. Integrate ledger sync next.</div>
-        </GlassCard>
-      )}
-
-      {currentPage === "staff" && (
-        <GlassCard title="Staff Management" subtitle="Shift overview, performance, and access controls." className="max-w-4xl mx-auto">
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatTile label="Active Staff" value={String(users.length + 1)} tone="slate" />
-            <StatTile label="Counters Live" value={String(Math.max(1, salesData.length))} tone="emerald" />
-            <StatTile label="Avg Sales / Counter" value={formatCurrency(salesData.length ? grandTotal / salesData.length : 0)} tone="amber" />
-          </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Staff module scaffold added. Add role permissions and shift logs next.</div>
-        </GlassCard>
-      )}
+        </div>
+      ) : null}
 
       <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur">
         <button onClick={() => setCurrentPage("dashboard")} className={`flex flex-1 flex-col items-center gap-1 rounded-[1rem] px-2 py-2 text-xs font-medium ${currentPage === "dashboard" ? "text-emerald-300" : "text-slate-400"}`}>
