@@ -1889,6 +1889,32 @@ export function AppShell() {
                   )}
                 </div>
               </div>
+
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                  <div>
+                    <div className="text-sm font-semibold text-white">Winner Deductions</div>
+                    <div className="text-xs text-slate-400">Deductions saved for {heading} on {salesDate}.</div>
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{winnerRecords.length} items</div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {winnerRecords.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No winner deductions saved for this counter on the selected date.</div>
+                  ) : (
+                    winnerRecords.map((winner) => (
+                      <div key={winner.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm">
+                        <div>
+                          <div className="font-semibold text-white">{winner.slotLabel}</div>
+                          <div className="text-xs text-slate-400">Saved for {winner.counterHeading}</div>
+                        </div>
+                        <div className="font-semibold text-amber-200">{formatCurrency(winner.amount)}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
