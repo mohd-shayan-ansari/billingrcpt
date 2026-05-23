@@ -312,27 +312,27 @@ export function AppShell() {
 
   useEffect(() => {
     let active = true;
-    if (currentPage === "sales" && session?.role === "MASTER_ADMIN") {
+    if (currentPage === "sales" && session) {
       void (async () => {
         try {
           setIsSalesLoading(true);
-          const [salesResponse, winnersResponse] = await Promise.all([
-            fetch(`/api/sales?date=${encodeURIComponent(salesDate)}`, { cache: "no-store" }),
-            fetch(`/api/winners?date=${encodeURIComponent(winnerDate)}`, { cache: "no-store" }),
-          ]);
-
-          if (salesResponse.ok) {
-            const data = await salesResponse.json();
-            if (active) {
-              setSalesData(data.salesData || []);
-              setGrandTotal(data.grandTotal || 0);
-            }
-          }
+          const winnersResponse = await fetch(`/api/winners?date=${encodeURIComponent(winnerDate)}`, { cache: "no-store" });
 
           if (winnersResponse.ok) {
             const data = await winnersResponse.json();
             if (active) {
               setWinnerRecords(data.winners || []);
+            }
+          }
+
+          if (session.role === "MASTER_ADMIN") {
+            const salesResponse = await fetch(`/api/sales?date=${encodeURIComponent(salesDate)}`, { cache: "no-store" });
+            if (salesResponse.ok) {
+              const data = await salesResponse.json();
+              if (active) {
+                setSalesData(data.salesData || []);
+                setGrandTotal(data.grandTotal || 0);
+              }
             }
           }
         } catch (e) {
@@ -435,17 +435,19 @@ export function AppShell() {
           setReceipts(receiptsData.receipts);
         }
 
-        // Fetch today's gross revenue and receipt count from server to avoid timezone mismatch
-        try {
-          const today = getLocalDateString();
-          const statsResp = await fetch(`/api/stats/today?date=${encodeURIComponent(today)}`, { cache: "no-store" });
-          if (statsResp.ok) {
-            const stats = await statsResp.json();
-            setTodayRevenue(Number(stats.grossTotal ?? 0));
-            setTodayReceiptsCount(Number(stats.receiptCount ?? 0));
+        // Master admin uses server-side totals; counter admin uses their own receipts.
+        if (data.user.role === "MASTER_ADMIN") {
+          try {
+            const today = getLocalDateString();
+            const statsResp = await fetch(`/api/stats/today?date=${encodeURIComponent(today)}`, { cache: "no-store" });
+            if (statsResp.ok) {
+              const stats = await statsResp.json();
+              setTodayRevenue(Number(stats.grossTotal ?? 0));
+              setTodayReceiptsCount(Number(stats.receiptCount ?? 0));
+            }
+          } catch (e) {
+            // ignore
           }
-        } catch (e) {
-          // ignore
         }
 
         // Set fixed counter heading based on user role
@@ -813,6 +815,12 @@ export function AppShell() {
     return [...receipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
   }
 
+  function getCurrentCounterWinnerDeductionTotal() {
+    return winnerRecords
+      .filter((winner) => winner.counterHeading === heading)
+      .reduce((sum, winner) => sum + winner.amount, 0);
+  }
+
   async function savePrinterDevice(device: Pick<PrinterSettings, "name" | "address"> & Partial<PrinterSettings>) {
     setPrinterMessage(null);
 
@@ -872,12 +880,17 @@ export function AppShell() {
     const visibleCategories = getVisibleCatalogCategories();
     const total = calculateTotalFromQuantities();
     const todaysReceipts = receipts.filter((receipt) => ((receipt as any).localDate ? (receipt as any).localDate === getLocalDateString() : getDateOnly(receipt.timestamp) === getLocalDateString()));
-    const todayTotal = todayRevenue || todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
+    const todayReceiptCountValue = currentSession.role === "MASTER_ADMIN"
+      ? (todayReceiptsCount || todaysReceipts.length)
+      : todaysReceipts.length;
+    const todayTotal = currentSession.role === "MASTER_ADMIN"
+      ? (todayRevenue || todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0))
+      : todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
 
     return (
       <div className="space-y-4 pb-36">
         <div className="grid gap-3 sm:grid-cols-3">
-          <StatTile label="Today Receipts" value={String(todayReceiptsCount || todaysReceipts.length)} tone="slate" />
+          <StatTile label="Today Receipts" value={String(todayReceiptCountValue)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
         </div>
 
@@ -1815,6 +1828,19 @@ export function AppShell() {
 
           {salesView === "summary" && session.role !== "MASTER_ADMIN" && (
             <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs uppercase tracking-[0.3em] text-slate-500">My Receipts</div>
+                  <div className="mt-1 text-2xl font-semibold text-white">{getAllReceipts().filter((receipt) => (receipt as any).localDate ? (receipt as any).localDate === salesDate : getDateOnly(receipt.timestamp) === salesDate).length}</div>
+                  <div className="text-sm text-slate-400">Created on the selected date</div>
+                </div>
+                <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Winner Deductions</div>
+                  <div className="mt-1 text-2xl font-semibold text-amber-200">{formatCurrency(getCurrentCounterWinnerDeductionTotal())}</div>
+                  <div className="text-sm text-slate-400">Made for {heading}</div>
+                </div>
+              </div>
+
               <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
                 <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
                   <div>
