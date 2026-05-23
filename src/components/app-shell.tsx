@@ -159,6 +159,11 @@ function getSalesSlotById(slotId: string) {
   return RESOLVED_SALES_SLOTS.find((slot) => slot.id === slotId) ?? null;
 }
 
+function getCounterHeading(user: UserRecord) {
+  const counterNum = user.name.match(/\d+/)?.[0];
+  return counterNum ? `Counter ${counterNum.padStart(2, "0")}` : user.name;
+}
+
 export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -196,6 +201,7 @@ export function AppShell() {
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
+  const [printPreviewReceipt, setPrintPreviewReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
   const [printerDevices, setPrinterDevices] = useState<PrinterDevice[]>([]);
@@ -223,6 +229,8 @@ export function AppShell() {
     const data = (await response.json()) as { winners: Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }> };
     setWinnerRecords(data.winners || []);
   }
+
+  const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
 
   async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -338,6 +346,12 @@ export function AppShell() {
       setWinnerForm((current) => ({ ...current, counterHeading: salesData[0].heading }));
     }
   }, [salesData, winnerForm.counterHeading]);
+
+  useEffect(() => {
+    if (!winnerForm.counterHeading && counterAdminUsers.length > 0) {
+      setWinnerForm((current) => ({ ...current, counterHeading: getCounterHeading(counterAdminUsers[0]) }));
+    }
+  }, [counterAdminUsers, winnerForm.counterHeading]);
 
   useEffect(() => {
     let active = true;
@@ -1339,6 +1353,7 @@ export function AppShell() {
       }
 
       setReceiptModalReceipt(null);
+      setPrintPreviewReceipt(null);
       if (Capacitor.isNativePlatform()) {
         await receiptPrintController.printReceipt(receiptToPrint);
       } else {
@@ -1647,9 +1662,15 @@ export function AppShell() {
                     className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
                   >
                     <option value="">Select Counter</option>
-                    {Array.from(new Set(salesData.map((sale) => sale.heading))).map((heading) => (
-                      <option key={heading} value={heading}>{heading}</option>
-                    ))}
+                    {counterAdminUsers.map((user) => {
+                      const heading = getCounterHeading(user);
+                      return (
+                        <option key={user.id} value={heading}>{heading}</option>
+                      );
+                    })}
+                    {counterAdminUsers.length === 0 && (
+                      <option value="" disabled>No counter admins found</option>
+                    )}
                   </select>
                   <input
                     type="number"
@@ -2003,11 +2024,53 @@ export function AppShell() {
               </button>
               <button
                 type="button"
-                onClick={() => void printReceiptImage(receiptModalReceipt)}
+                onClick={() => setPrintPreviewReceipt(receiptModalReceipt)}
                 disabled={receiptActionLoading === "print"}
                 className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950 disabled:opacity-60"
               >
                 {receiptActionLoading === "print" ? "Printing..." : "Print Receipt"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {printPreviewReceipt ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm print:hidden">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950/95 p-4 shadow-2xl shadow-black/50">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Print Preview</h3>
+                <p className="text-sm text-slate-400">Review the receipt before printing.</p>
+              </div>
+              <button type="button" onClick={() => setPrintPreviewReceipt(null)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+            </div>
+            <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-4 text-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+              <div className="mx-auto max-w-[280px] space-y-1 font-mono text-[18px] leading-[1.35] text-center">
+                {buildReceiptLines({
+                  receiptNumber: printPreviewReceipt.receiptNumber,
+                  heading: printPreviewReceipt.heading ?? heading,
+                  timestamp: new Date(printPreviewReceipt.timestamp),
+                  entries: toReceiptEntries(printPreviewReceipt),
+                }).lines.map((line, index) => (
+                  <div key={`${line}-${index}`}>{line}</div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPrintPreviewReceipt(null)}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void printReceiptImage(printPreviewReceipt)}
+                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950"
+              >
+                Print
               </button>
             </div>
           </div>
