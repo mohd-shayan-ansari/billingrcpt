@@ -148,8 +148,12 @@ function getCurrentSalesSlotId() {
 }
 
 function getSlotEmoji(label: string) {
-  const [hourPart] = label.split(":").map((part) => Number(part));
-  return hourPart >= 9 && hourPart < 18 ? "☀️" : "🌙";
+  const [hourPart, minutePart] = label.split(":").map((part) => Number(part));
+  const totalMinutes = (hourPart || 0) * 60 + (minutePart || 0);
+  // Sun: 09:00 - 17:59 (inclusive). Moon: 18:00 - 22:40 (inclusive).
+  if (totalMinutes >= 9 * 60 && totalMinutes <= 17 * 60 + 59) return "☀️";
+  if (totalMinutes >= 18 * 60 && totalMinutes <= 22 * 60 + 40) return "🌙";
+  return "🌙";
 }
 
 export function AppShell() {
@@ -606,29 +610,11 @@ export function AppShell() {
         </div>
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
             <div>
               <div className="text-sm uppercase tracking-[0.35em] text-slate-500">P...</div>
               <h2 className="mt-1 text-2xl font-semibold text-white">{ROLE_LABELS[currentSession.role]} console</h2>
               <p className="text-sm text-slate-400">Mobile POS mode for billing and counter entry.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((current) => !current)}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
-                aria-label="Open menu"
-              >
-                ☰
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage("sales")}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
-                aria-label="Reports"
-              >
-                ▦
-              </button>
             </div>
           </div>
 
@@ -753,9 +739,9 @@ export function AppShell() {
                           className={`relative aspect-[0.92] rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
                         >
                           <div className="flex h-full flex-col justify-between">
-                            <div className="rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 p-4 text-center text-emerald-300">◻</div>
+                            <div className="rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 p-4 text-center text-emerald-300">{category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT'}</div>
                             <div>
-                              <div className="font-semibold text-white">{ITEM_LABELS[category].slice(0, 2).toUpperCase()}-{code}</div>
+                              <div className="font-semibold text-white">{(category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT')}-{code}</div>
                               <div className="text-sm font-semibold text-emerald-300">{formatCurrency(rates[category])}</div>
                             </div>
                           </div>
@@ -1267,36 +1253,19 @@ export function AppShell() {
 
   return (
     <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
-      <div className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-white md:text-4xl">{ROLE_LABELS[session.role]} console</h1>
+      {currentPage === "settings" && (
+        <div className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-white md:text-4xl">{ROLE_LABELS[session.role]} console</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {currentPage !== "dashboard" && (
+              <button onClick={() => { setCurrentPage("dashboard"); setMenuOpen(false); }} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Back</button>
+            )}
+            <button onClick={handleLogout} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Sign out</button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {session.role === "MASTER_ADMIN" && currentPage === "dashboard" && (
-            <div className="relative">
-              <button onClick={() => setMenuOpen(!menuOpen)} className="rounded-xl border border-white/15 bg-slate-950/70 px-3 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">
-                <div className="space-y-1">
-                  <div className="h-1 w-5 bg-white"></div>
-                  <div className="h-1 w-5 bg-white"></div>
-                  <div className="h-1 w-5 bg-white"></div>
-                </div>
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 mt-2 rounded-xl border border-white/10 bg-slate-950/90 shadow-lg z-50">
-                  <button onClick={() => { setCurrentPage("rates"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 rounded-t-xl text-sm">Change Rates</button>
-                  <button onClick={() => { setCurrentPage("sales"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 text-sm">Sales</button>
-                  <button onClick={() => { setCurrentPage("admins"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 text-sm">Counter Admins</button>
-                  <button onClick={() => { setCurrentPage("update-password"); setMenuOpen(false); }} className="block w-full px-4 py-2 text-left text-white hover:bg-amber-300/20 rounded-b-xl text-sm">Update Password</button>
-                </div>
-              )}
-            </div>
-          )}
-          {currentPage !== "dashboard" && (
-            <button onClick={() => { setCurrentPage("dashboard"); setMenuOpen(false); }} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Back</button>
-          )}
-          <button onClick={handleLogout} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Sign out</button>
-        </div>
-      </div>
+      )}
 
       {message ? <div className="mb-6 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{message}</div> : null}
 
