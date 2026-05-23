@@ -230,27 +230,6 @@ export function AppShell() {
   }, [currentPage, salesDate, session]);
 
   useEffect(() => {
-    if (!printPreviewReceipt) {
-      return;
-    }
-
-    const handleAfterPrint = () => {
-      setPrintPreviewReceipt(null);
-      setReceiptActionLoading(null);
-    };
-
-    const timer = window.setTimeout(() => {
-      window.print();
-    }, 120);
-
-    window.addEventListener("afterprint", handleAfterPrint);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("afterprint", handleAfterPrint);
-    };
-  }, [printPreviewReceipt]);
-
-  useEffect(() => {
     void (async () => {
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
@@ -583,6 +562,27 @@ export function AppShell() {
     return match;
   }
 
+  function getDateOnly(value: string) {
+    const date = new Date(value);
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return localDate.toISOString().split("T")[0];
+  }
+
+  function getFilteredSalesHistory() {
+    return receipts.filter((receipt) => {
+      const matchDate = getDateOnly(receipt.timestamp) === salesDate;
+      const receiptEntries = toReceiptEntries(receipt);
+      const searchTerm = salesReceiptSearch.trim().toLowerCase();
+      const matchSearch = !salesReceiptSearch.trim()
+        || receipt.receiptNumber.toLowerCase().includes(searchTerm)
+        || (receipt.heading ?? "").toLowerCase().includes(searchTerm)
+        || receipt.admin?.name?.toLowerCase().includes(searchTerm)
+        || receiptEntries.some((entry) => ITEM_LABELS[entry.itemKey].toLowerCase().includes(searchTerm) || entry.code.toLowerCase().includes(searchTerm));
+      const matchSlot = salesSlotFilterId === "all" || getTimeSlotIdForTimestamp(receipt.timestamp) === salesSlotFilterId;
+      return matchDate && matchSearch && matchSlot;
+    });
+  }
+
   function getSalesHistorySlotLabel(value: string) {
     const slotId = getTimeSlotIdForTimestamp(value);
     if (!slotId) {
@@ -593,21 +593,19 @@ export function AppShell() {
     return slot ? formatSlotLabel(slot) : "No slot";
   }
 
-  function getDateOnly(value: string) {
-    const date = new Date(value);
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-    return localDate.toISOString().split("T")[0];
-  }
-
-  function getFilteredSalesHistory() {
-    return receipts.filter((receipt) => {
-      const matchDate = salesHistoryScope === "all" || getDateOnly(receipt.timestamp) === salesDate;
-      const matchSearch = !salesReceiptSearch.trim()
-        || receipt.receiptNumber.toLowerCase().includes(salesReceiptSearch.toLowerCase())
-        || (receipt.heading ?? "").toLowerCase().includes(salesReceiptSearch.toLowerCase())
-        || receipt.admin?.name?.toLowerCase().includes(salesReceiptSearch.toLowerCase());
-      const matchSlot = salesSlotFilterId === "all" || getTimeSlotIdForTimestamp(receipt.timestamp) === salesSlotFilterId;
-      return matchDate && matchSearch && matchSlot;
+  function getFilteredSalesHistoryItems() {
+    return getFilteredSalesHistory().flatMap((receipt) => {
+      const slotLabel = getSalesHistorySlotLabel(receipt.timestamp);
+      return toReceiptEntries(receipt).map((entry) => ({
+        id: `${receipt.id}-${entry.itemKey}-${entry.code}`,
+        receiptNumber: receipt.receiptNumber,
+        timestamp: receipt.timestamp,
+        slotLabel,
+        itemKey: entry.itemKey,
+        itemName: ITEM_LABELS[entry.itemKey],
+        code: entry.code,
+        qty: entry.qty,
+      }));
     });
   }
 
@@ -1429,15 +1427,25 @@ export function AppShell() {
             </>
           ) : (
             <div className="space-y-4">
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setSalesHistoryScope("all"); setSalesSlotFilterId("all"); setCurrentPage("sales"); setSalesView("history"); }}
+                  className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  All Past Receipts
+                </button>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                 <input
                   value={salesReceiptSearch}
                   onChange={(event) => setSalesReceiptSearch(event.target.value)}
-                  placeholder="Search by receipt no, counter, or admin"
+                  placeholder="Search item name or number"
                   className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
                 />
                 <div className="flex items-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-slate-300">
-                  {getFilteredSalesHistory().length} receipts
+                  {getFilteredSalesHistoryItems().length} items
                 </div>
               </div>
 
@@ -1462,42 +1470,27 @@ export function AppShell() {
               </div>
 
               <div className="space-y-3">
-                {getFilteredSalesHistory().length === 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No receipts match your filters.</div>
+                {getFilteredSalesHistoryItems().length === 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No sold items match your filters.</div>
                 ) : (
-                  getFilteredSalesHistory().map((receipt) => (
-                    <div key={receipt.id} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                  getFilteredSalesHistoryItems().map((item) => (
+                    <div key={item.id} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
                       <div>
-                        <div className="font-semibold text-white">{receipt.receiptNumber} • {receipt.heading ?? "Counter"}</div>
-                        <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.admin.name}</div>
-                        <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">Slot: {getSalesHistorySlotLabel(receipt.timestamp)}</div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {toReceiptEntries(receipt).map((entry) => (
-                            <div key={`${receipt.id}-${entry.itemKey}-${entry.code}`} className="min-w-[8rem] rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{ITEM_LABELS[entry.itemKey]}</div>
-                              <div className="text-sm font-semibold text-white">No. {entry.code}</div>
-                              <div className="text-xs text-slate-300">Qty {entry.qty}</div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-emerald-300">{formatCurrency(receipt.totalAmount)}</div>
+                        <div className="font-semibold text-white">{item.itemName} • No. {item.code}</div>
+                        <div className="text-sm text-slate-400">{formatDate(item.timestamp)} • {item.slotLabel}</div>
+                        <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">Qty: {item.qty}</div>
+                        <div className="mt-1 text-xs text-slate-500">Receipt {item.receiptNumber}</div>
                       </div>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => {
-                            setReceiptModalReceipt(receipt);
+                            const receipt = getFilteredSalesHistory().find((entry) => entry.receiptNumber === item.receiptNumber && getDateOnly(entry.timestamp) === getDateOnly(item.timestamp));
+                            if (receipt) setReceiptModalReceipt(receipt);
                           }}
                           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
                         >
                           Open
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void downloadReceiptImage(receipt)}
-                          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-emerald-950"
-                        >
-                          Download
                         </button>
                       </div>
                     </div>
