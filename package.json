@@ -4,7 +4,7 @@
     "private": true,
     "scripts": {
         "dev": "next dev",
-        "prebuild": "npm install --include=dev",
+        "prebuild": "npm install --include=dev && npx prisma generate",
         "postinstall": "node scripts/fix-capacitor-toolchain.js",
         "build": "next build",
         "start": "next start",
