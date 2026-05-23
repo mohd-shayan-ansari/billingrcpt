@@ -16,7 +16,7 @@ const winnerSchema = z.object({
 export async function GET(request: Request) {
   const session = await getSessionFromRequest(request);
 
-  if (!session || session.role !== Role.MASTER_ADMIN) {
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -27,8 +27,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ winners: [] });
   }
 
+  const where: { date: string; counterHeading?: string } = { date };
+
+  if (session.role !== Role.MASTER_ADMIN) {
+    const counterNum = session.name.match(/\d+/)?.[0];
+    where.counterHeading = counterNum ? `Counter ${counterNum.padStart(2, "0")}` : session.name;
+  }
+
   const winners = await prisma.winnerDeduction.findMany({
-    where: { date },
+    where,
     orderBy: [{ slotId: "asc" }, { createdAt: "asc" }],
   });
 
