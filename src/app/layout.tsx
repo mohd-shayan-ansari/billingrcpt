@@ -13,12 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Billing Lottery",
+  title: "billing",
   description: "Thermal receipt generator with master and counter admin controls",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "Billing Lottery",
+    title: "billing",
     statusBarStyle: "default",
   },
 };

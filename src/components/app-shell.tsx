@@ -133,20 +133,21 @@ function resolveSalesSlots(slots: readonly string[]) {
 
 const RESOLVED_SALES_SLOTS = resolveSalesSlots(SALES_TIME_SLOTS);
 
+function getSalesSlotForMinutes(minutesSinceMidnight: number) {
+  for (const slot of RESOLVED_SALES_SLOTS) {
+    if (minutesSinceMidnight <= slot.minutes) {
+      return slot;
+    }
+  }
+
+  return RESOLVED_SALES_SLOTS[RESOLVED_SALES_SLOTS.length - 1] ?? null;
+}
+
 function getCurrentSalesSlotId() {
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  let selectedSlot = RESOLVED_SALES_SLOTS[0]?.id ?? "all";
-  for (const slot of RESOLVED_SALES_SLOTS) {
-    if (currentMinutes >= slot.minutes) {
-      selectedSlot = slot.id;
-    } else {
-      break;
-    }
-  }
-
-  return selectedSlot;
+  return getSalesSlotForMinutes(currentMinutes)?.id ?? "all";
 }
 
 function formatSlotLabel(slot: { label: string; minutes: number }) {
@@ -592,16 +593,7 @@ export function AppShell() {
     const date = new Date(value);
     const currentMinutes = date.getHours() * 60 + date.getMinutes();
 
-    let match: string | null = null;
-    for (const slot of RESOLVED_SALES_SLOTS) {
-      if (currentMinutes >= slot.minutes) {
-        match = slot.id;
-      } else {
-        break;
-      }
-    }
-
-    return match;
+    return getSalesSlotForMinutes(currentMinutes)?.id ?? null;
   }
 
   function getDateOnly(value: string) {

@@ -1,6 +1,6 @@
 {
-    "name": "Billing Lottery",
-    "short_name": "Billing Lottery",
+    "name": "billing",
+    "short_name": "billing",
     "description": "Mobile billing and receipt console for Android and the web.",
     "start_url": "/",
     "scope": "/",
