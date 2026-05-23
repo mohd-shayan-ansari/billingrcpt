@@ -61,6 +61,7 @@ export async function GET(request: Request) {
     SELECT
       r.id,
       r."receiptNumber",
+      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
       r.heading,
       r.timestamp,
       r."adminId",
@@ -91,6 +92,7 @@ export async function GET(request: Request) {
   const normalizedReceipts = receipts.map((receipt) => ({
     id: String(receipt.id),
     receiptNumber: String(receipt.receiptNumber),
+    localDate: receipt.local_date ? String(receipt.local_date) : null,
     heading: receipt.heading === null ? null : String(receipt.heading),
     timestamp: String(receipt.timestamp),
     admin: {
@@ -251,6 +253,7 @@ export async function POST(request: Request) {
     SELECT
       r.id,
       r."receiptNumber",
+      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
       r.heading,
       r.timestamp,
       r."adminId",
@@ -281,6 +284,7 @@ export async function POST(request: Request) {
     receipt: {
       id: String(receipt.id),
       receiptNumber: String(receipt.receiptNumber),
+      localDate: receipt.local_date ? String(receipt.local_date) : null,
       heading: receipt.heading === null ? null : String(receipt.heading),
       timestamp: String(receipt.timestamp),
       admin: {

@@ -742,7 +742,7 @@ export function AppShell() {
 
   function getFilteredSalesHistory() {
     return receipts.filter((receipt) => {
-      const matchDate = getDateOnly(receipt.timestamp) === salesDate;
+      const matchDate = (receipt as any).localDate ? (receipt as any).localDate === salesDate : getDateOnly(receipt.timestamp) === salesDate;
       const receiptEntries = toReceiptEntries(receipt);
       const searchTerm = salesReceiptSearch.trim().toLowerCase();
       const matchSearch = !salesReceiptSearch.trim()
@@ -865,7 +865,7 @@ export function AppShell() {
     const selectedCount = getSelectedCount();
     const visibleCategories = getVisibleCatalogCategories();
     const total = calculateTotalFromQuantities();
-    const todaysReceipts = receipts.filter((receipt) => getDateOnly(receipt.timestamp) === getLocalDateString());
+    const todaysReceipts = receipts.filter((receipt) => ((receipt as any).localDate ? (receipt as any).localDate === getLocalDateString() : getDateOnly(receipt.timestamp) === getLocalDateString()));
     const todayTotal = todayRevenue || todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
 
     return (
