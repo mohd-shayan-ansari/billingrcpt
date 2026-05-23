@@ -16,15 +16,31 @@ export async function GET(request: Request) {
   const reportDate = dateStr ?? new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   try {
-    const groupedSales = await prisma.$queryRaw<Array<{ heading: string | null; grossTotal: bigint | number }>>(Prisma.sql`
-      SELECT
-        r.heading,
-        COALESCE(SUM(r."totalAmount"), 0) AS "grossTotal"
+    // Fetch receipts in a window around the date and compute local date in JS
+    // to avoid Postgres timestamp/timestamptz inconsistencies. Group by heading
+    // using the same Asia/Kolkata local date logic used across the app.
+    const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
+      SELECT r.heading, r.timestamp, r."totalAmount"
       FROM "Receipt" r
-      WHERE DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata') = CAST(${reportDate} AS DATE)
-      GROUP BY r.heading
-      ORDER BY r.heading ASC
+      WHERE r.timestamp >= (CAST(${reportDate} AS DATE) - INTERVAL '1 day')
+        AND r.timestamp < (CAST(${reportDate} AS DATE) + INTERVAL '2 day')
     `);
+
+    const grossMap = new Map<string, number>();
+    const toNumber = (v: number | bigint | undefined | null) => (typeof v === 'bigint' ? Number(v) : Number(v ?? 0));
+    for (const r of rows) {
+      try {
+        const ts = String(r.timestamp);
+        const d = new Date(ts);
+        const localDate = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        if (localDate !== reportDate) continue;
+        const heading = (r.heading as string) || 'Unknown Counter';
+        const amt = toNumber(r.totalAmount as any);
+        grossMap.set(heading, (grossMap.get(heading) ?? 0) + amt);
+      } catch (e) {
+        // ignore malformed rows
+      }
+    }
 
     const winnerDeductions = await prisma.winnerDeduction.findMany({
       where: { date: reportDate },
@@ -33,12 +49,6 @@ export async function GET(request: Request) {
         amount: true,
       },
     });
-
-    const grossMap = new Map<string, number>();
-    for (const group of groupedSales) {
-      const grossTotal = typeof group.grossTotal === "bigint" ? Number(group.grossTotal) : Number(group.grossTotal ?? 0);
-      grossMap.set(group.heading || "Unknown Counter", grossTotal);
-    }
 
     const deductionMap = new Map<string, number>();
     for (const entry of winnerDeductions) {
