@@ -180,9 +180,11 @@ export function AppShell() {
   const [activeCategory, setActiveCategory] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
   const [posScreen, setPosScreen] = useState<"catalog" | "cart" | "receipt">("catalog");
   const [salesView, setSalesView] = useState<"summary" | "history">("summary");
+  const [salesHistoryScope, setSalesHistoryScope] = useState<"day" | "all">("day");
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
+  const [printPreviewReceipt, setPrintPreviewReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
 
   useEffect(() => {
@@ -226,6 +228,27 @@ export function AppShell() {
     }
     return () => { active = false; };
   }, [currentPage, salesDate, session]);
+
+  useEffect(() => {
+    if (!printPreviewReceipt) {
+      return;
+    }
+
+    const handleAfterPrint = () => {
+      setPrintPreviewReceipt(null);
+      setReceiptActionLoading(null);
+    };
+
+    const timer = window.setTimeout(() => {
+      window.print();
+    }, 120);
+
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [printPreviewReceipt]);
 
   useEffect(() => {
     void (async () => {
@@ -560,6 +583,16 @@ export function AppShell() {
     return match;
   }
 
+  function getSalesHistorySlotLabel(value: string) {
+    const slotId = getTimeSlotIdForTimestamp(value);
+    if (!slotId) {
+      return "No slot";
+    }
+
+    const slot = RESOLVED_SALES_SLOTS.find((entry) => entry.id === slotId);
+    return slot ? formatSlotLabel(slot) : "No slot";
+  }
+
   function getDateOnly(value: string) {
     const date = new Date(value);
     const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -568,7 +601,7 @@ export function AppShell() {
 
   function getFilteredSalesHistory() {
     return receipts.filter((receipt) => {
-      const matchDate = getDateOnly(receipt.timestamp) === salesDate;
+      const matchDate = salesHistoryScope === "all" || getDateOnly(receipt.timestamp) === salesDate;
       const matchSearch = !salesReceiptSearch.trim()
         || receipt.receiptNumber.toLowerCase().includes(salesReceiptSearch.toLowerCase())
         || (receipt.heading ?? "").toLowerCase().includes(salesReceiptSearch.toLowerCase())
@@ -1100,9 +1133,10 @@ export function AppShell() {
   async function printReceiptImage(receiptData?: ReceiptRecord) {
     setReceiptActionLoading("print");
     try {
-      await exportReceiptImage(receiptData, "print");
+      setReceiptModalReceipt(null);
+      setPrintPreviewReceipt(receiptData ?? lastReceipt ?? null);
     } finally {
-      setReceiptActionLoading(null);
+      // cleared after the print dialog closes
     }
   }
 
@@ -1248,7 +1282,8 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <>
+    <div className="min-h-screen flex flex-col print:hidden">
       <div
         className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10 flex-1 overflow-y-auto"
         style={{ paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}
@@ -1435,6 +1470,16 @@ export function AppShell() {
                       <div>
                         <div className="font-semibold text-white">{receipt.receiptNumber} • {receipt.heading ?? "Counter"}</div>
                         <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.admin.name}</div>
+                        <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">Slot: {getSalesHistorySlotLabel(receipt.timestamp)}</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {toReceiptEntries(receipt).map((entry) => (
+                            <div key={`${receipt.id}-${entry.itemKey}-${entry.code}`} className="min-w-[8rem] rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{ITEM_LABELS[entry.itemKey]}</div>
+                              <div className="text-sm font-semibold text-white">No. {entry.code}</div>
+                              <div className="text-xs text-slate-300">Qty {entry.qty}</div>
+                            </div>
+                          ))}
+                        </div>
                         <div className="mt-1 text-sm font-semibold text-emerald-300">{formatCurrency(receipt.totalAmount)}</div>
                       </div>
                       <div className="flex gap-2">
@@ -1477,6 +1522,7 @@ export function AppShell() {
               <>
                 <button onClick={() => setCurrentPage("rates")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Change Rates</button>
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
+                <button onClick={() => { setCurrentPage("sales"); setSalesView("history"); setSalesHistoryScope("all"); setSalesSlotFilterId("all"); }} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">All Past Receipts</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
               </>
@@ -1529,9 +1575,34 @@ export function AppShell() {
         </div>
       ) : null}
 
-      </div>
+      {printPreviewReceipt ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm print:items-start print:bg-white print:px-0 print:py-0">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950 p-4 shadow-2xl shadow-black/50 print:max-w-none print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none">
+            <div className="mb-4 flex items-start justify-between gap-3 print:hidden">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Print layout</h3>
+                <p className="text-sm text-slate-400">Connected printer dialog will open automatically.</p>
+              </div>
+              <button type="button" onClick={() => { setPrintPreviewReceipt(null); setReceiptActionLoading(null); }} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+            </div>
+            <div className="mx-auto w-full max-w-[320px] rounded-[1.6rem] border border-slate-300 bg-white p-3 text-slate-900 print:max-w-none print:rounded-none print:border-0 print:p-0">
+              <div className="space-y-1 font-mono text-[10px] leading-[1.35]">
+                {buildReceiptLines({
+                  receiptNumber: printPreviewReceipt.receiptNumber,
+                  heading: printPreviewReceipt.heading ?? heading,
+                  timestamp: new Date(printPreviewReceipt.timestamp),
+                  entries: toReceiptEntries(printPreviewReceipt),
+                }).lines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
-      <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur"
+      </div>
+    </div>
+
+      <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur print:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <button onClick={() => setCurrentPage("dashboard")} className={`flex flex-1 flex-col items-center gap-1 rounded-[1rem] px-2 py-2 text-xs font-medium ${currentPage === "dashboard" ? "text-emerald-300" : "text-slate-400"}`}>
@@ -1547,6 +1618,6 @@ export function AppShell() {
           Settings
         </button>
       </nav>
-    </div>
+    </>
   );
 }
