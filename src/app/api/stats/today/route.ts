@@ -17,10 +17,17 @@ export async function GET(request: Request) {
         COUNT(*) AS receipt_count
       FROM "Receipt" r
       WHERE DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata') = CAST(${date} AS DATE)
-    `);
+    `) as Array<{
+      gross_total?: number | bigint;
+      grossTotal?: number | bigint;
+      receipt_count?: number | bigint;
+      count?: number | bigint;
+    }>;
 
-    const grossTotal = Number(rows[0].gross_total ?? rows[0].grossTotal ?? 0);
-    const receiptCount = Number(rows[0].receipt_count ?? rows[0].count ?? 0);
+    const raw = rows[0] ?? {};
+    const toNumber = (v: number | bigint | undefined | null) => (typeof v === "bigint" ? Number(v) : Number(v ?? 0));
+    const grossTotal = toNumber(raw.gross_total ?? raw.grossTotal ?? 0);
+    const receiptCount = toNumber(raw.receipt_count ?? raw.count ?? 0);
 
     return NextResponse.json({ grossTotal, receiptCount, date });
   } catch (error) {
