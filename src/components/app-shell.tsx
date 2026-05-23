@@ -9,6 +9,8 @@ import { Share } from "@capacitor/share";
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
+import { receiptPrintController } from "@/lib/printer/receipt-print-controller";
+import type { PaperWidth, PrinterDevice, PrinterSettings, PrinterStatus } from "@/lib/printer/types";
 
 type SessionUser = {
   id: string;
@@ -167,7 +169,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts" | "printer-settings">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
@@ -185,6 +187,11 @@ export function AppShell() {
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
+  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
+  const [printerDevices, setPrinterDevices] = useState<PrinterDevice[]>([]);
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings | null>(null);
+  const [printerLoading, setPrinterLoading] = useState(false);
+  const [printerMessage, setPrinterMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -227,6 +234,42 @@ export function AppShell() {
     }
     return () => { active = false; };
   }, [currentPage, salesDate, session]);
+
+  useEffect(() => {
+    let active = true;
+    if (currentPage === "printer-settings") {
+      void (async () => {
+        setPrinterLoading(true);
+        setPrinterMessage(null);
+        try {
+          await receiptPrintController.requestPermissions();
+          const [status, devices, settings] = await Promise.all([
+            receiptPrintController.getStatus(),
+            receiptPrintController.getPairedPrinters(),
+            receiptPrintController.getSettings(),
+          ]);
+
+          if (active) {
+            setPrinterStatus(status);
+            setPrinterDevices(devices);
+            setPrinterSettings(settings);
+          }
+        } catch (error) {
+          if (active) {
+            setPrinterMessage(error instanceof Error ? error.message : "Unable to load printers");
+          }
+        } finally {
+          if (active) {
+            setPrinterLoading(false);
+          }
+        }
+      })();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [currentPage]);
 
   useEffect(() => {
     void (async () => {
@@ -626,6 +669,49 @@ export function AppShell() {
 
   function getAllReceipts() {
     return [...receipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+  }
+
+  async function savePrinterDevice(device: Pick<PrinterSettings, "name" | "address"> & Partial<PrinterSettings>) {
+    setPrinterMessage(null);
+
+    try {
+      const nextSettings = await receiptPrintController.saveSettings({
+        name: device.name,
+        address: device.address,
+        paperWidthMm: printerSettings?.paperWidthMm ?? 58,
+        autoCut: printerSettings?.autoCut ?? true,
+        qrText: printerSettings?.qrText ?? null,
+        logoBase64: printerSettings?.logoBase64 ?? null,
+      });
+
+      setPrinterSettings(nextSettings);
+      setPrinterStatus(await receiptPrintController.getStatus());
+      setMessage(`Printer saved: ${device.name}`);
+    } catch (error) {
+      setPrinterMessage(error instanceof Error ? error.message : "Unable to save printer");
+    }
+  }
+
+  async function updatePrinterPaperWidth(paperWidthMm: PaperWidth) {
+    if (!printerSettings) {
+      return;
+    }
+
+    await savePrinterDevice({
+      name: printerSettings.name,
+      address: printerSettings.address,
+      paperWidthMm,
+    });
+  }
+
+  async function handleTestPrint() {
+    setPrinterMessage(null);
+    try {
+      await receiptPrintController.testPrint();
+      setMessage("Test print sent to printer");
+    } catch (error) {
+      setPrinterMessage(error instanceof Error ? error.message : "Test print failed");
+    }
   }
 
   function incrementCodeQuantity(category: (typeof RECEIPT_KEYS)[number], code: string) {
@@ -1150,9 +1236,22 @@ export function AppShell() {
 
   async function printReceiptImage(receiptData?: ReceiptRecord) {
     setReceiptActionLoading("print");
+    setMessage(null);
     try {
+      const receiptToPrint = receiptData ?? lastReceipt;
+      if (!receiptToPrint) {
+        throw new Error("No receipt available to print");
+      }
+
       setReceiptModalReceipt(null);
-      await exportReceiptImage(receiptData ?? lastReceipt ?? undefined, "print");
+      if (Capacitor.isNativePlatform()) {
+        await receiptPrintController.printReceipt(receiptToPrint);
+      } else {
+        await exportReceiptImage(receiptToPrint, "print");
+      }
+      setMessage("Print job sent");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Print failed");
     } finally {
       setReceiptActionLoading(null);
     }
@@ -1504,17 +1603,21 @@ export function AppShell() {
                             </div>
                             <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{items.length} items</div>
                           </div>
-                          <div className="mt-3 space-y-2">
+                          <div className="mt-3 grid grid-cols-[1.1fr_0.9fr_0.45fr_0.95fr] gap-2 border-b border-white/10 pb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                            <div>Item</div>
+                            <div>Time</div>
+                            <div>Qty</div>
+                            <div>Rcpt No</div>
+                          </div>
+                          <div className="mt-2 space-y-2">
                             {items.map((item) => (
-                              <div key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <div className="font-semibold text-white">{item.itemName}</div>
-                                    <div className="text-xs text-slate-400">No. {item.code} • Receipt {item.receiptNumber}</div>
-                                  </div>
-                                  <div className="rounded-full bg-emerald-400/15 px-3 py-1 text-sm font-semibold text-emerald-300">Qty {item.qty}</div>
+                              <div key={item.id} className="grid grid-cols-[1.1fr_0.9fr_0.45fr_0.95fr] gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm">
+                                <div className="min-w-0">
+                                  <div className="truncate font-semibold text-white">{item.itemName} No. {item.code}</div>
                                 </div>
-                                <div className="mt-2 text-xs text-slate-400">{formatDate(item.timestamp)}</div>
+                                <div className="text-slate-300">{formatDate(item.timestamp)}</div>
+                                <div className="font-semibold text-emerald-300">{item.qty}</div>
+                                <div className="font-semibold text-white">{item.receiptNumber}</div>
                               </div>
                             ))}
                           </div>
@@ -1599,6 +1702,69 @@ export function AppShell() {
         </GlassCard>
       )}
 
+      {currentPage === "printer-settings" && (
+        <GlassCard className="max-w-5xl mx-auto" title="Printer Settings" subtitle="Select a paired Bluetooth thermal printer and paper width.">
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Status</div>
+                <div className="mt-2 text-lg font-semibold text-white">
+                  {printerLoading ? "Loading printer status..." : printerStatus?.message ?? "Printer not configured"}
+                </div>
+                <div className="mt-2 text-sm text-slate-400">
+                  {printerStatus?.savedPrinter
+                    ? `${printerStatus.savedPrinter.name} • ${printerStatus.savedPrinter.paperWidthMm}mm • ${printerStatus.savedPrinter.autoCut ? "Auto cut" : "No cut"}`
+                    : "No printer selected yet."}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => void handleTestPrint()} className="rounded-[1.2rem] bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Test Print</button>
+                <button type="button" onClick={() => setCurrentPage("settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Back</button>
+              </div>
+            </div>
+
+            {printerMessage ? <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{printerMessage}</div> : null}
+
+            <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Paper</div>
+                    <div className="text-lg font-semibold text-white">58mm / 80mm</div>
+                  </div>
+                  <div className="grid grid-cols-2 rounded-[1rem] border border-white/10 bg-slate-950/80 p-1 text-sm font-semibold">
+                    <button type="button" onClick={() => void updatePrinterPaperWidth(58)} className={`rounded-[0.9rem] px-3 py-2 ${printerSettings?.paperWidthMm === 58 ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>58mm</button>
+                    <button type="button" onClick={() => void updatePrinterPaperWidth(80)} className={`rounded-[0.9rem] px-3 py-2 ${printerSettings?.paperWidthMm === 80 ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>80mm</button>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-400">The selected width controls ESC/POS alignment and column spacing.</p>
+              </div>
+
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Paired Printers</div>
+                <div className="mt-3 space-y-2">
+                  {printerDevices.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-400">No paired Bluetooth printers found.</div>
+                  ) : (
+                    printerDevices.map((device) => (
+                      <button
+                        key={device.address}
+                        type="button"
+                        onClick={() => void savePrinterDevice(device)}
+                        className={`w-full rounded-2xl border px-4 py-3 text-left transition ${printerSettings?.address === device.address ? "border-emerald-400 bg-emerald-400/10 text-white" : "border-white/10 bg-slate-950/70 text-slate-200 hover:bg-white/5"}`}
+                      >
+                        <div className="font-semibold">{device.name}</div>
+                        <div className="text-xs text-slate-400">{device.address}</div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
       {currentPage === "dashboard" && renderMobileDashboard()}
 
       {currentPage === "settings" && (
@@ -1613,6 +1779,7 @@ export function AppShell() {
                 <button onClick={() => setCurrentPage("rates")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Change Rates</button>
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
                 <button onClick={() => setCurrentPage("receipts")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">All Past Receipts</button>
+                <button onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Settings</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
               </>
