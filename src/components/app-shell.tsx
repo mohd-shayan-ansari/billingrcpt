@@ -190,6 +190,7 @@ export function AppShell() {
   const [salesDate, setSalesDate] = useState(getLocalDateString());
   const [salesData, setSalesData] = useState<Array<{ heading: string; grossTotal: number; deductionTotal: number; netTotal: number }>>([]);
   const [grandTotal, setGrandTotal] = useState(0);
+  const [todayRevenue, setTodayRevenue] = useState(0);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
   const [winnerDate, setWinnerDate] = useState(getLocalDateString());
   const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
@@ -425,6 +426,18 @@ export function AppShell() {
         if (receiptsResponse.ok) {
           const receiptsData = (await receiptsResponse.json()) as { receipts: ReceiptRecord[] };
           setReceipts(receiptsData.receipts);
+        }
+
+        // Fetch today's gross revenue from server to avoid timezone mismatch
+        try {
+          const today = getLocalDateString();
+          const salesResp = await fetch(`/api/sales?date=${encodeURIComponent(today)}`, { cache: "no-store" });
+          if (salesResp.ok) {
+            const salesData = await salesResp.json();
+            setTodayRevenue(Number(salesData.grossTotal ?? 0));
+          }
+        } catch (e) {
+          // ignore
         }
 
         // Set fixed counter heading based on user role
@@ -850,10 +863,8 @@ export function AppShell() {
     const selectedCount = getSelectedCount();
     const visibleCategories = getVisibleCatalogCategories();
     const total = calculateTotalFromQuantities();
-    const today = new Date();
-    const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const todaysReceipts = receipts.filter((receipt) => getDateOnly(receipt.timestamp) === todayDate);
-    const todayTotal = todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
+    const todaysReceipts = receipts.filter((receipt) => getDateOnly(receipt.timestamp) === getLocalDateString());
+    const todayTotal = todayRevenue || todaysReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
 
     return (
       <div className="space-y-4 pb-36">

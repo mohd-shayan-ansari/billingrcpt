@@ -48,10 +48,12 @@ export async function GET(request: Request) {
     const headings = Array.from(new Set([...grossMap.keys(), ...deductionMap.keys()])).sort((left, right) => left.localeCompare(right));
 
     let grandTotal = 0;
+    let grossOverall = 0;
     const salesData = headings.map((heading) => {
       const grossTotal = grossMap.get(heading) ?? 0;
       const deductionTotal = deductionMap.get(heading) ?? 0;
       const netTotal = grossTotal - deductionTotal;
+      grossOverall += grossTotal;
       grandTotal += netTotal;
       return {
         heading,
@@ -61,7 +63,7 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ salesData, grandTotal, date: reportDate });
+    return NextResponse.json({ salesData, grandTotal, grossTotal: grossOverall, date: reportDate });
   } catch (error) {
     console.error("Error fetching sales data:", error);
     return NextResponse.json({ error: "Failed to fetch sales data" }, { status: 500 });
