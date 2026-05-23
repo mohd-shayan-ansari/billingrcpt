@@ -10,6 +10,15 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   }
 
   const { id } = await context.params;
+  if (id === session.id) {
+    return NextResponse.json({ error: "You cannot remove your own account" }, { status: 400 });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
   await prisma.user.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });

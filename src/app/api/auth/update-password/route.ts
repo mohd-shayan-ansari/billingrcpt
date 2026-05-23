@@ -48,6 +48,11 @@ export async function POST(request: Request) {
     targetUserId = parsed.data.userId;
   }
 
+  const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+  if (!targetUser) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
   // Update to new password
   const newPasswordHash = await hashPassword(parsed.data.newPassword);
 

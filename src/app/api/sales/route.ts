@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         r.heading,
         COALESCE(SUM(r."totalAmount"), 0) AS "grossTotal"
       FROM "Receipt" r
-      WHERE DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata') = ${reportDate}
+      WHERE DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata') = CAST(${reportDate} AS DATE)
       GROUP BY r.heading
       ORDER BY r.heading ASC
     `);

@@ -213,6 +213,7 @@ export function AppShell() {
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings | null>(null);
   const [printerLoading, setPrinterLoading] = useState(false);
   const [printerMessage, setPrinterMessage] = useState<string | null>(null);
+  const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "password" | null>(null);
 
   async function refreshSalesReport(date = salesDate) {
     const response = await fetch(`/api/sales?date=${encodeURIComponent(date)}`, { cache: "no-store" });
@@ -1392,81 +1393,108 @@ export function AppShell() {
 
   async function createCounterAdmin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAdminActionLoading("create");
+    setMessage(null);
     if (!adminForm.name || !adminForm.password) {
       setMessage("Please fill in Name and Password");
+      setAdminActionLoading(null);
       return;
     }
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: adminForm.name, password: adminForm.password }),
-    });
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: adminForm.name, password: adminForm.password }),
+      });
 
-    const data = await response.json().catch(() => ({ error: "Network error" }));
-    if (!response.ok || !data.user) {
-      // Handle Zod validation errors (which are objects)
-      let errorMsg = "Unable to create counter admin";
-      if (typeof data.error === "string") {
-        errorMsg = data.error;
-      } else if (typeof data.error === "object" && data.error !== null) {
-        // Extract first error message from Zod fieldErrors
-        const firstField = Object.keys(data.error)[0];
-        if (firstField && Array.isArray(data.error[firstField])) {
-          errorMsg = data.error[firstField][0];
+      const data = await response.json().catch(() => ({ error: "Network error" }));
+      if (!response.ok || !data.user) {
+        // Handle Zod validation errors (which are objects)
+        let errorMsg = "Unable to create counter admin";
+        if (typeof data.error === "string") {
+          errorMsg = data.error;
+        } else if (typeof data.error === "object" && data.error !== null) {
+          const firstField = Object.keys(data.error)[0];
+          if (firstField && Array.isArray(data.error[firstField])) {
+            errorMsg = data.error[firstField][0];
+          }
         }
+        setMessage(errorMsg);
+        return;
       }
-      setMessage(errorMsg);
-      return;
-    }
 
-    setMessage(`Created ${data.user.name}`);
-    setAdminForm({ name: "", password: "" });
-    await refreshUsers();
+      setMessage(`Created ${data.user.name} (${data.user.username})`);
+      setAdminForm({ name: "", password: "" });
+      await refreshUsers();
+    } finally {
+      setAdminActionLoading(null);
+    }
   }
 
   async function deleteUser(id: string) {
-    const response = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
-    if (!response.ok) {
-      setMessage("Unable to remove user");
+    if (session?.id === id) {
+      setMessage("You cannot remove your own account");
       return;
     }
 
-    setMessage("Counter admin removed");
-    await refreshUsers();
+    setAdminActionLoading("delete");
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: "Network error" }));
+        setMessage(data.error ?? "Unable to remove user");
+        return;
+      }
+
+      setMessage("Counter admin removed");
+      await refreshUsers();
+    } finally {
+      setAdminActionLoading(null);
+    }
   }
 
   async function updatePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAdminActionLoading("password");
+    setMessage(null);
     if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
       setMessage("Please fill in all password fields");
+      setAdminActionLoading(null);
       return;
     }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setMessage("New password and confirm password do not match");
+      setAdminActionLoading(null);
       return;
     }
     if (passwordForm.newPassword.length < 6) {
       setMessage("Password must be at least 6 characters");
+      setAdminActionLoading(null);
       return;
     }
-    const response = await fetch("/api/auth/update-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        currentPassword: passwordForm.currentPassword, 
-        newPassword: passwordForm.newPassword,
-        userId: passwordForm.selectedUserId === "self" ? undefined : passwordForm.selectedUserId,
-      }),
-    });
+    try {
+      const response = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          currentPassword: passwordForm.currentPassword, 
+          newPassword: passwordForm.newPassword,
+          userId: passwordForm.selectedUserId === "self" ? undefined : passwordForm.selectedUserId,
+        }),
+      });
 
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({ error: "Network error" }));
-      setMessage(data.error ?? "Unable to update password");
-      return;
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: "Network error" }));
+        setMessage(data.error ?? "Unable to update password");
+        return;
+      }
+
+      setMessage("Password updated successfully");
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
+    } finally {
+      setAdminActionLoading(null);
     }
-
-    setMessage("Password updated successfully");
-    setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   }
 
   async function runSearch(event: React.FormEvent<HTMLFormElement>) {
@@ -1558,7 +1586,7 @@ export function AppShell() {
             <form onSubmit={createCounterAdmin} className="mt-4 space-y-3 max-w-md">
               <input value={adminForm.name} onChange={(event) => setAdminForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Name" required />
               <input value={adminForm.password} onChange={(event) => setAdminForm((current) => ({ ...current, password: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Password" type="password" required />
-              <button className="w-full rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300">Add counter admin</button>
+                <button disabled={adminActionLoading === "create"} className="w-full rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-60">{adminActionLoading === "create" ? "Adding..." : "Add counter admin"}</button>
             </form>
           </div>
 
@@ -1574,7 +1602,7 @@ export function AppShell() {
                       <div className="font-semibold text-white">{user.name}</div>
                       <div className="text-sm text-slate-400">{user.username}</div>
                     </div>
-                    <button onClick={() => deleteUser(user.id)} className="rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/20">Remove</button>
+                    <button onClick={() => deleteUser(user.id)} disabled={adminActionLoading === "delete" || session?.id === user.id} className="rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:opacity-60">{session?.id === user.id ? "Self" : adminActionLoading === "delete" ? "Removing..." : "Remove"}</button>
                   </div>
                 ))
               )}
@@ -1596,6 +1624,11 @@ export function AppShell() {
                     <option key={user.id} value={user.id}>{user.name}</option>
                   ))}
                 </select>
+                <span className="text-xs text-slate-400">
+                  {passwordForm.selectedUserId === "self"
+                    ? "Change your own password."
+                    : "Master admin can reset the selected account after confirming the current admin password."}
+                </span>
               </label>
             </div>
           )}
@@ -1612,7 +1645,7 @@ export function AppShell() {
               <span>Confirm New Password</span>
               <input type="password" value={passwordForm.confirmPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" required />
             </label>
-            <button className="w-full rounded-2xl bg-amber-300 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-200">Update Password</button>
+            <button disabled={adminActionLoading === "password"} className="w-full rounded-2xl bg-amber-300 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60">{adminActionLoading === "password" ? "Updating..." : "Update Password"}</button>
           </form>
         </div>
       )}
