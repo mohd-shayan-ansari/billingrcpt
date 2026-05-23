@@ -191,6 +191,7 @@ export function AppShell() {
   const [salesData, setSalesData] = useState<Array<{ heading: string; grossTotal: number; deductionTotal: number; netTotal: number }>>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [todayRevenue, setTodayRevenue] = useState(0);
+  const [todayReceiptsCount, setTodayReceiptsCount] = useState(0);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
   const [winnerDate, setWinnerDate] = useState(getLocalDateString());
   const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
@@ -428,13 +429,14 @@ export function AppShell() {
           setReceipts(receiptsData.receipts);
         }
 
-        // Fetch today's gross revenue from server to avoid timezone mismatch
+        // Fetch today's gross revenue and receipt count from server to avoid timezone mismatch
         try {
           const today = getLocalDateString();
-          const salesResp = await fetch(`/api/sales?date=${encodeURIComponent(today)}`, { cache: "no-store" });
-          if (salesResp.ok) {
-            const salesData = await salesResp.json();
-            setTodayRevenue(Number(salesData.grossTotal ?? 0));
+          const statsResp = await fetch(`/api/stats/today?date=${encodeURIComponent(today)}`, { cache: "no-store" });
+          if (statsResp.ok) {
+            const stats = await statsResp.json();
+            setTodayRevenue(Number(stats.grossTotal ?? 0));
+            setTodayReceiptsCount(Number(stats.receiptCount ?? 0));
           }
         } catch (e) {
           // ignore
@@ -869,7 +871,7 @@ export function AppShell() {
     return (
       <div className="space-y-4 pb-36">
         <div className="grid gap-3 sm:grid-cols-3">
-          <StatTile label="Today Receipts" value={String(todaysReceipts.length)} tone="slate" />
+          <StatTile label="Today Receipts" value={String(todayReceiptsCount || todaysReceipts.length)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
         </div>
 
