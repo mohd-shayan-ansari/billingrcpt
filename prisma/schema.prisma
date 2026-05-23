@@ -57,3 +57,17 @@ model Receipt {
   @@index([adminId, timestamp])
   @@index([timestamp])
 }
+
+model WinnerDeduction {
+  id             String   @id @default(cuid())
+  date           String
+  slotId         String
+  slotLabel      String
+  counterHeading String
+  amount         Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([date, slotId])
+  @@index([date, counterHeading])
+}

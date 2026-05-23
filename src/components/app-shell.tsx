@@ -155,6 +155,10 @@ function formatSlotLabel(slot: { label: string; minutes: number }) {
   return `${slot.label} ${period}`;
 }
 
+function getSalesSlotById(slotId: string) {
+  return RESOLVED_SALES_SLOTS.find((slot) => slot.id === slotId) ?? null;
+}
+
 export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -174,9 +178,14 @@ export function AppShell() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
-  const [salesData, setSalesData] = useState<Array<{ heading: string; total: number }>>([]);
+  const [salesData, setSalesData] = useState<Array<{ heading: string; grossTotal: number; deductionTotal: number; netTotal: number }>>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
+  const [winnerDate, setWinnerDate] = useState(new Date().toISOString().split("T")[0]);
+  const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
+  const [winnerRecords, setWinnerRecords] = useState<Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }>>([]);
+  const [winnerLoading, setWinnerLoading] = useState(false);
+  const [winnerMessage, setWinnerMessage] = useState<string | null>(null);
   const [codeSelectionOpen, setCodeSelectionOpen] = useState<"andar" | "bahar" | "result" | null>(null);
   const [codeQuantities, setCodeQuantities] = useState<Record<string, Record<string, number>>>({ andar: {}, bahar: {}, result: {} });
   const [activeMode, setActiveMode] = useState<"service" | "simple">("service");
@@ -193,6 +202,79 @@ export function AppShell() {
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings | null>(null);
   const [printerLoading, setPrinterLoading] = useState(false);
   const [printerMessage, setPrinterMessage] = useState<string | null>(null);
+
+  async function refreshSalesReport(date = salesDate) {
+    const response = await fetch(`/api/sales?date=${date}`, { cache: "no-store" });
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as { salesData: Array<{ heading: string; grossTotal: number; deductionTotal: number; netTotal: number }>; grandTotal: number };
+    setSalesData(data.salesData || []);
+    setGrandTotal(data.grandTotal || 0);
+  }
+
+  async function refreshWinnerRecords(date = winnerDate) {
+    const response = await fetch(`/api/winners?date=${date}`, { cache: "no-store" });
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as { winners: Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }> };
+    setWinnerRecords(data.winners || []);
+  }
+
+  async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWinnerMessage(null);
+
+    const amount = Number(winnerForm.amount);
+    const slot = getSalesSlotById(winnerForm.slotId);
+
+    if (!slot) {
+      setWinnerMessage("Select a valid time slot.");
+      return;
+    }
+
+    if (!winnerForm.counterHeading.trim()) {
+      setWinnerMessage("Select a counter first.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setWinnerMessage("Enter a valid winner amount.");
+      return;
+    }
+
+    setWinnerLoading(true);
+    try {
+      const response = await fetch("/api/winners", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: winnerDate,
+          slotId: slot.id,
+          slotLabel: formatSlotLabel(slot),
+          counterHeading: winnerForm.counterHeading.trim(),
+          amount,
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setWinnerMessage(data.error ?? "Unable to save winner.");
+        return;
+      }
+
+      setWinnerForm((current) => ({ ...current, amount: "" }));
+      setWinnerMessage("Winner saved and deducted from the selected counter.");
+      await Promise.all([refreshSalesReport(winnerDate), refreshWinnerRecords(winnerDate)]);
+    } catch (error) {
+      setWinnerMessage(error instanceof Error ? error.message : "Unable to save winner.");
+    } finally {
+      setWinnerLoading(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -218,12 +300,23 @@ export function AppShell() {
       void (async () => {
         try {
           setIsSalesLoading(true);
-          const resp = await fetch(`/api/sales?date=${salesDate}`, { cache: "no-store" });
-          if (resp.ok) {
-            const data = await resp.json();
+          const [salesResponse, winnersResponse] = await Promise.all([
+            fetch(`/api/sales?date=${salesDate}`, { cache: "no-store" }),
+            fetch(`/api/winners?date=${winnerDate}`, { cache: "no-store" }),
+          ]);
+
+          if (salesResponse.ok) {
+            const data = await salesResponse.json();
             if (active) {
               setSalesData(data.salesData || []);
               setGrandTotal(data.grandTotal || 0);
+            }
+          }
+
+          if (winnersResponse.ok) {
+            const data = await winnersResponse.json();
+            if (active) {
+              setWinnerRecords(data.winners || []);
             }
           }
         } catch (e) {
@@ -234,7 +327,17 @@ export function AppShell() {
       })();
     }
     return () => { active = false; };
-  }, [currentPage, salesDate, session]);
+  }, [currentPage, salesDate, session, winnerDate]);
+
+  useEffect(() => {
+    setWinnerDate(salesDate);
+  }, [salesDate]);
+
+  useEffect(() => {
+    if (!winnerForm.counterHeading && salesData.length > 0) {
+      setWinnerForm((current) => ({ ...current, counterHeading: salesData[0].heading }));
+    }
+  }, [salesData, winnerForm.counterHeading]);
 
   useEffect(() => {
     let active = true;
@@ -1514,6 +1617,65 @@ export function AppShell() {
 
           {salesView === "summary" ? (
             <>
+              <form onSubmit={handleCreateWinner} className="mb-6 space-y-4 rounded-[1.4rem] border border-emerald-400/20 bg-emerald-400/5 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-emerald-200">Set Winner Deduction</div>
+                    <div className="text-xs text-slate-400">Select a slot, choose a counter, and enter the amount to deduct.</div>
+                  </div>
+                  <input
+                    type="date"
+                    value={winnerDate}
+                    onChange={(event) => setWinnerDate(event.target.value)}
+                    className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none"
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+                  <select
+                    value={winnerForm.slotId}
+                    onChange={(event) => setWinnerForm((current) => ({ ...current, slotId: event.target.value }))}
+                    className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
+                  >
+                    {RESOLVED_SALES_SLOTS.map((slot) => (
+                      <option key={slot.id} value={slot.id}>{formatSlotLabel(slot)}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={winnerForm.counterHeading}
+                    onChange={(event) => setWinnerForm((current) => ({ ...current, counterHeading: event.target.value }))}
+                    className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
+                  >
+                    <option value="">Select Counter</option>
+                    {Array.from(new Set(salesData.map((sale) => sale.heading))).map((heading) => (
+                      <option key={heading} value={heading}>{heading}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={winnerForm.amount}
+                    onChange={(event) => setWinnerForm((current) => ({ ...current, amount: event.target.value }))}
+                    placeholder="Winner amount"
+                    className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={winnerLoading}
+                    className="rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-60"
+                  >
+                    {winnerLoading ? "Saving..." : "Save Winner"}
+                  </button>
+                </div>
+
+                {winnerMessage && (
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
+                    {winnerMessage}
+                  </div>
+                )}
+              </form>
+
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {isSalesLoading ? (
                   <div className="col-span-full py-8 text-center text-slate-400">Loading sales data...</div>
@@ -1522,8 +1684,11 @@ export function AppShell() {
                 ) : (
                   salesData.map((sale, index) => (
                     <div key={index} className="flex items-center justify-between p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
-                      <span className="font-medium text-white">{sale.heading}</span>
-                      <span className="font-semibold text-amber-200">{formatCurrency(sale.total)}</span>
+                      <div>
+                        <span className="font-medium text-white">{sale.heading}</span>
+                        <div className="text-xs text-slate-400">Gross {formatCurrency(sale.grossTotal)} • Winner {formatCurrency(sale.deductionTotal)}</div>
+                      </div>
+                      <span className="font-semibold text-amber-200">{formatCurrency(sale.netTotal)}</span>
                     </div>
                   ))
                 )}
@@ -1535,6 +1700,31 @@ export function AppShell() {
                   <span className="text-2xl font-bold text-amber-300">{formatCurrency(grandTotal)}</span>
                 </div>
               )}
+
+              <div className="mt-6 rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                  <div>
+                    <div className="text-sm font-semibold text-white">Winner Deductions</div>
+                    <div className="text-xs text-slate-400">Saved deductions for the selected date.</div>
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{winnerRecords.length} items</div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {winnerRecords.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No winner deductions saved yet.</div>
+                  ) : (
+                    winnerRecords.map((winner) => (
+                      <div key={winner.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm">
+                        <div>
+                          <div className="font-semibold text-white">{winner.counterHeading}</div>
+                          <div className="text-xs text-slate-400">{winner.slotLabel}</div>
+                        </div>
+                        <div className="font-semibold text-emerald-300">{formatCurrency(winner.amount)}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </>
           ) : (
             <div className="space-y-4">

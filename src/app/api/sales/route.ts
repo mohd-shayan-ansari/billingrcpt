@@ -44,17 +44,42 @@ export async function GET(request: Request) {
       },
     });
 
+    const reportDate = dateStr || startDate.toISOString().split("T")[0];
+    const winnerDeductions = await prisma.winnerDeduction.findMany({
+      where: { date: reportDate },
+      select: {
+        counterHeading: true,
+        amount: true,
+      },
+    });
+
+    const grossMap = new Map<string, number>();
+    for (const group of groupedSales) {
+      grossMap.set(group.heading || "Unknown Counter", group._sum.totalAmount || 0);
+    }
+
+    const deductionMap = new Map<string, number>();
+    for (const entry of winnerDeductions) {
+      deductionMap.set(entry.counterHeading, (deductionMap.get(entry.counterHeading) ?? 0) + entry.amount);
+    }
+
+    const headings = Array.from(new Set([...grossMap.keys(), ...deductionMap.keys()])).sort((left, right) => left.localeCompare(right));
+
     let grandTotal = 0;
-    const salesData = groupedSales.map((group) => {
-      const total = group._sum.totalAmount || 0;
-      grandTotal += total;
+    const salesData = headings.map((heading) => {
+      const grossTotal = grossMap.get(heading) ?? 0;
+      const deductionTotal = deductionMap.get(heading) ?? 0;
+      const netTotal = grossTotal - deductionTotal;
+      grandTotal += netTotal;
       return {
-        heading: group.heading || "Unknown Counter",
-        total,
+        heading,
+        grossTotal,
+        deductionTotal,
+        netTotal,
       };
     });
 
-    return NextResponse.json({ salesData, grandTotal, date: dateStr || startDate.toISOString().split("T")[0] });
+    return NextResponse.json({ salesData, grandTotal, date: reportDate });
   } catch (error) {
     console.error("Error fetching sales data:", error);
     return NextResponse.json({ error: "Failed to fetch sales data" }, { status: 500 });
