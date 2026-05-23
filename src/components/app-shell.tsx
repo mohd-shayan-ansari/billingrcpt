@@ -1252,16 +1252,18 @@ export function AppShell() {
   }
 
   return (
-    <main className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10">
+    <div className="min-h-screen flex flex-col">
+      <div
+        className="no-print mx-auto w-full max-w-7xl px-4 py-6 md:py-10 flex-1 overflow-y-auto"
+        style={{ paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}
+      >
       {currentPage === "settings" && (
         <div className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-white md:text-4xl">{ROLE_LABELS[session.role]} console</h1>
           </div>
           <div className="flex items-center gap-3">
-            {currentPage !== "dashboard" && (
-              <button onClick={() => { setCurrentPage("dashboard"); setMenuOpen(false); }} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Back</button>
-            )}
+            <button onClick={() => { setCurrentPage("dashboard"); setMenuOpen(false); }} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Back</button>
             <button onClick={handleLogout} className="rounded-2xl border border-white/15 bg-slate-950/70 px-4 py-3 font-medium text-white transition hover:border-amber-300/60 hover:text-amber-100">Sign out</button>
           </div>
         </div>
@@ -1531,7 +1533,11 @@ export function AppShell() {
         </div>
       ) : null}
 
-      <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur">
+      </div>
+
+      <nav className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/92 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         <button onClick={() => setCurrentPage("dashboard")} className={`flex flex-1 flex-col items-center gap-1 rounded-[1rem] px-2 py-2 text-xs font-medium ${currentPage === "dashboard" ? "text-emerald-300" : "text-slate-400"}`}>
           <span className="text-lg">▣</span>
           Dashboard
@@ -1545,6 +1551,6 @@ export function AppShell() {
           Settings
         </button>
       </nav>
-    </main>
+    </div>
   );
 }
