@@ -10,6 +10,7 @@ import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/con
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
 import { receiptPrintController } from "@/lib/printer/receipt-print-controller";
+import { nativeReceiptPrintController } from "@/lib/printer/native-receipt-print-controller";
 import type { PaperWidth, PrinterDevice, PrinterSettings, PrinterStatus } from "@/lib/printer/types";
 
 type SessionUser = {
@@ -1352,13 +1353,13 @@ export function AppShell() {
         throw new Error("No receipt available to print");
       }
 
-      setReceiptModalReceipt(null);
-      setPrintPreviewReceipt(null);
       if (Capacitor.isNativePlatform()) {
-        await receiptPrintController.printReceipt(receiptToPrint);
+        await nativeReceiptPrintController.printReceipt(receiptToPrint, printerSettings?.paperWidthMm ?? 58);
       } else {
         await exportReceiptImage(receiptToPrint, "print");
       }
+      setReceiptModalReceipt(null);
+      setPrintPreviewReceipt(null);
       setMessage("Print job sent");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Print failed");
