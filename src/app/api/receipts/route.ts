@@ -92,7 +92,16 @@ export async function GET(request: Request) {
   const normalizedReceipts = receipts.map((receipt) => ({
     id: String(receipt.id),
     receiptNumber: String(receipt.receiptNumber),
-    localDate: receipt.local_date ? String(receipt.local_date) : null,
+    // Compute authoritative local date in Asia/Kolkata from the timestamp to avoid
+    // DB type mismatches (timestamp vs timestamptz) causing off-by-one-day issues.
+    localDate: (() => {
+      try {
+        const d = new Date(String(receipt.timestamp));
+        return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      } catch (e) {
+        return receipt.local_date ? String(receipt.local_date) : null;
+      }
+    })(),
     heading: receipt.heading === null ? null : String(receipt.heading),
     timestamp: String(receipt.timestamp),
     admin: {
@@ -284,7 +293,14 @@ export async function POST(request: Request) {
     receipt: {
       id: String(receipt.id),
       receiptNumber: String(receipt.receiptNumber),
-      localDate: receipt.local_date ? String(receipt.local_date) : null,
+      localDate: (() => {
+        try {
+          const d = new Date(String(receipt.timestamp));
+          return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        } catch (e) {
+          return receipt.local_date ? String(receipt.local_date) : null;
+        }
+      })(),
       heading: receipt.heading === null ? null : String(receipt.heading),
       timestamp: String(receipt.timestamp),
       admin: {
