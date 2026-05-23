@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { getSessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -13,38 +13,19 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const dateStr = url.searchParams.get("date");
 
-  let startDate: Date;
-  let endDate: Date;
-
-  if (dateStr) {
-    // Expecting YYYY-MM-DD
-    startDate = new Date(`${dateStr}T00:00:00.000`);
-    endDate = new Date(`${dateStr}T23:59:59.999`);
-  } else {
-    // Default to today
-    const now = new Date();
-    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  }
+  const reportDate = dateStr ?? new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   try {
-    const groupedSales = await prisma.receipt.groupBy({
-      by: ["heading"],
-      where: {
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      _sum: {
-        totalAmount: true,
-      },
-      orderBy: {
-        heading: "asc",
-      },
-    });
+    const groupedSales = await prisma.$queryRaw<Array<{ heading: string | null; grossTotal: bigint | number }>>(Prisma.sql`
+      SELECT
+        r.heading,
+        COALESCE(SUM(r."totalAmount"), 0) AS "grossTotal"
+      FROM "Receipt" r
+      WHERE DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata') = ${reportDate}
+      GROUP BY r.heading
+      ORDER BY r.heading ASC
+    `);
 
-    const reportDate = dateStr || startDate.toISOString().split("T")[0];
     const winnerDeductions = await prisma.winnerDeduction.findMany({
       where: { date: reportDate },
       select: {
@@ -55,7 +36,8 @@ export async function GET(request: Request) {
 
     const grossMap = new Map<string, number>();
     for (const group of groupedSales) {
-      grossMap.set(group.heading || "Unknown Counter", group._sum.totalAmount || 0);
+      const grossTotal = typeof group.grossTotal === "bigint" ? Number(group.grossTotal) : Number(group.grossTotal ?? 0);
+      grossMap.set(group.heading || "Unknown Counter", grossTotal);
     }
 
     const deductionMap = new Map<string, number>();

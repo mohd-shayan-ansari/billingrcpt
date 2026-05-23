@@ -10,7 +10,6 @@ import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/con
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
 import { receiptPrintController } from "@/lib/printer/receipt-print-controller";
-import { nativeReceiptPrintController } from "@/lib/printer/native-receipt-print-controller";
 import type { PaperWidth, PrinterDevice, PrinterSettings, PrinterStatus } from "@/lib/printer/types";
 
 type SessionUser = {
@@ -71,6 +70,11 @@ function formatCurrency(value: number) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function getLocalDateString(value = new Date()) {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+  return local.toISOString().split("T")[0];
 }
 
 function newEntry(itemKey: (typeof RECEIPT_KEYS)[number] = "andar"): ReceiptEntryDraft {
@@ -183,11 +187,11 @@ export function AppShell() {
   const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts" | "printer-settings">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
-  const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
+  const [salesDate, setSalesDate] = useState(getLocalDateString());
   const [salesData, setSalesData] = useState<Array<{ heading: string; grossTotal: number; deductionTotal: number; netTotal: number }>>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
-  const [winnerDate, setWinnerDate] = useState(new Date().toISOString().split("T")[0]);
+  const [winnerDate, setWinnerDate] = useState(getLocalDateString());
   const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
   const [winnerRecords, setWinnerRecords] = useState<Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }>>([]);
   const [winnerLoading, setWinnerLoading] = useState(false);
@@ -211,7 +215,7 @@ export function AppShell() {
   const [printerMessage, setPrinterMessage] = useState<string | null>(null);
 
   async function refreshSalesReport(date = salesDate) {
-    const response = await fetch(`/api/sales?date=${date}`, { cache: "no-store" });
+    const response = await fetch(`/api/sales?date=${encodeURIComponent(date)}`, { cache: "no-store" });
     if (!response.ok) {
       return;
     }
@@ -222,7 +226,7 @@ export function AppShell() {
   }
 
   async function refreshWinnerRecords(date = winnerDate) {
-    const response = await fetch(`/api/winners?date=${date}`, { cache: "no-store" });
+    const response = await fetch(`/api/winners?date=${encodeURIComponent(date)}`, { cache: "no-store" });
     if (!response.ok) {
       return;
     }
@@ -310,8 +314,8 @@ export function AppShell() {
         try {
           setIsSalesLoading(true);
           const [salesResponse, winnersResponse] = await Promise.all([
-            fetch(`/api/sales?date=${salesDate}`, { cache: "no-store" }),
-            fetch(`/api/winners?date=${winnerDate}`, { cache: "no-store" }),
+            fetch(`/api/sales?date=${encodeURIComponent(salesDate)}`, { cache: "no-store" }),
+            fetch(`/api/winners?date=${encodeURIComponent(winnerDate)}`, { cache: "no-store" }),
           ]);
 
           if (salesResponse.ok) {
@@ -1354,13 +1358,14 @@ export function AppShell() {
       }
 
       if (Capacitor.isNativePlatform()) {
-        await nativeReceiptPrintController.printReceipt(receiptToPrint, printerSettings?.paperWidthMm ?? 58);
+        await receiptPrintController.requestPermissions();
+        await receiptPrintController.printReceipt(receiptToPrint);
       } else {
         await exportReceiptImage(receiptToPrint, "print");
       }
       setReceiptModalReceipt(null);
       setPrintPreviewReceipt(null);
-      setMessage("Print job sent");
+      setMessage(Capacitor.isNativePlatform() ? "Print job sent to Bluetooth printer" : "Print job sent");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Print failed");
     } finally {
