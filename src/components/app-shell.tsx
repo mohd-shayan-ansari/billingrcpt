@@ -147,13 +147,9 @@ function getCurrentSalesSlotId() {
   return selectedSlot;
 }
 
-function getSlotEmoji(label: string) {
-  const [hourPart, minutePart] = label.split(":").map((part) => Number(part));
-  const totalMinutes = (hourPart || 0) * 60 + (minutePart || 0);
-  // Sun: 09:00 - 17:59 (inclusive). Moon: 18:00 - 22:40 (inclusive).
-  if (totalMinutes >= 9 * 60 && totalMinutes <= 17 * 60 + 59) return "☀️";
-  if (totalMinutes >= 18 * 60 && totalMinutes <= 22 * 60 + 40) return "🌙";
-  return "🌙";
+function formatSlotLabel(slot: { label: string; minutes: number }) {
+  const period = slot.minutes < 12 * 60 ? "AM" : "PM";
+  return `${slot.label} ${period}`;
 }
 
 export function AppShell() {
@@ -1425,7 +1421,7 @@ export function AppShell() {
                     onClick={() => setSalesSlotFilterId(slot.id)}
                     className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${salesSlotFilterId === slot.id ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
                   >
-                    <span className="mr-1">{getSlotEmoji(slot.label)}</span>{slot.label}
+                    {formatSlotLabel(slot)}
                   </button>
                 ))}
               </div>
