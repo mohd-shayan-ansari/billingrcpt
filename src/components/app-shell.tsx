@@ -350,6 +350,12 @@ export function AppShell() {
   }, [salesDate]);
 
   useEffect(() => {
+    if (session?.role) {
+      setSalesView("summary");
+    }
+  }, [session?.role]);
+
+  useEffect(() => {
     if (!winnerForm.counterHeading && salesData.length > 0) {
       setWinnerForm((current) => ({ ...current, counterHeading: salesData[0].heading }));
     }
@@ -1663,12 +1669,18 @@ export function AppShell() {
         </div>
       )}
 
-      {currentPage === "sales" && session.role === "MASTER_ADMIN" && (
-        <GlassCard className="max-w-5xl mx-auto" title="Sales Report" subtitle="Counter totals and full invoice history.">
+      {currentPage === "sales" && session && (
+        <GlassCard
+          className="max-w-5xl mx-auto"
+          title={session.role === "MASTER_ADMIN" ? "Sales Report" : "My Receipts"}
+          subtitle={session.role === "MASTER_ADMIN"
+            ? "Counter totals and full invoice history."
+            : "Your receipts and receipt history."}
+        >
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="grid grid-cols-2 rounded-[1.2rem] border border-white/10 bg-white/5 p-1 text-sm font-semibold sm:w-72">
-              <button type="button" onClick={() => setSalesView("summary")} className={`rounded-[1rem] px-3 py-2 ${salesView === "summary" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>Counter Totals</button>
-              <button type="button" onClick={() => setSalesView("history")} className={`rounded-[1rem] px-3 py-2 ${salesView === "history" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>Sales History</button>
+              <button type="button" onClick={() => setSalesView("summary")} className={`rounded-[1rem] px-3 py-2 ${salesView === "summary" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>{session.role === "MASTER_ADMIN" ? "Counter Totals" : "My Receipts"}</button>
+              <button type="button" onClick={() => setSalesView("history")} className={`rounded-[1rem] px-3 py-2 ${salesView === "history" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>{session.role === "MASTER_ADMIN" ? "Sales History" : "My History"}</button>
             </div>
             <div className="flex items-center gap-3">
               <label htmlFor="sales-date" className="text-sm text-slate-300 font-medium">Date:</label>
@@ -1682,7 +1694,7 @@ export function AppShell() {
             </div>
           </div>
 
-          {salesView === "summary" ? (
+          {salesView === "summary" && session.role === "MASTER_ADMIN" && (
             <>
               <form onSubmit={handleCreateWinner} className="mb-6 space-y-4 rounded-[1.4rem] border border-emerald-400/20 bg-emerald-400/5 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1799,7 +1811,62 @@ export function AppShell() {
                 </div>
               </div>
             </>
-          ) : (
+          )}
+
+          {salesView === "summary" && session.role !== "MASTER_ADMIN" && (
+            <div className="space-y-4">
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                  <div>
+                    <div className="text-sm font-semibold text-white">My Receipts</div>
+                    <div className="text-xs text-slate-400">All receipts created from this counter.</div>
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{getAllReceipts().length} items</div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {getAllReceipts().length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No receipts created yet.</div>
+                  ) : (
+                    getAllReceipts().filter((receipt) => {
+                      const term = salesReceiptSearch.trim().toLowerCase();
+                      if (!term) return true;
+                      return receipt.receiptNumber.toLowerCase().includes(term)
+                        || (receipt.heading ?? "").toLowerCase().includes(term)
+                        || receipt.admin?.name?.toLowerCase().includes(term)
+                        || toReceiptEntries(receipt).some((entry) => ITEM_LABELS[entry.itemKey].toLowerCase().includes(term) || entry.code.toLowerCase().includes(term));
+                    }).map((receipt) => (
+                      <div key={receipt.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/70 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                        <div>
+                          <div className="font-semibold text-white">Receipt {receipt.receiptNumber}</div>
+                          <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.heading ?? heading}</div>
+                          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">{toReceiptEntries(receipt).map((entry) => `${ITEM_LABELS[entry.itemKey]} No. ${entry.code} Qty ${entry.qty}`).join(" • ")}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setReceiptModalReceipt(receipt)}
+                            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
+                          >
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void printReceiptImage(receipt)}
+                            className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-emerald-950"
+                          >
+                            Print
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {salesView === "history" && (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-3">
                 <button
