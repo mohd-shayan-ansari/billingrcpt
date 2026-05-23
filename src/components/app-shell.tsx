@@ -167,7 +167,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split("T")[0]);
@@ -184,7 +184,6 @@ export function AppShell() {
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
-  const [printPreviewReceipt, setPrintPreviewReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
 
   useEffect(() => {
@@ -607,6 +606,26 @@ export function AppShell() {
         qty: entry.qty,
       }));
     });
+  }
+
+  function getSalesHistorySlotBuckets() {
+    const buckets = RESOLVED_SALES_SLOTS.map((slot) => ({
+      slot,
+      items: [] as ReturnType<typeof getFilteredSalesHistoryItems>,
+    }));
+
+    for (const item of getFilteredSalesHistoryItems()) {
+      const bucket = buckets.find((entry) => formatSlotLabel(entry.slot) === item.slotLabel);
+      if (bucket) {
+        bucket.items.push(item);
+      }
+    }
+
+    return buckets.filter((bucket) => bucket.items.length > 0);
+  }
+
+  function getAllReceipts() {
+    return [...receipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
   }
 
   function incrementCodeQuantity(category: (typeof RECEIPT_KEYS)[number], code: string) {
@@ -1083,14 +1102,15 @@ export function AppShell() {
       frame.setAttribute("aria-hidden", "true");
       frame.srcdoc = `<!doctype html><html><head><title>${receiptNum}</title><style>html,body{margin:0;padding:0;background:#fff}img{display:block;width:100%;height:auto}</style></head><body><img src="${dataUrl}" alt="${receiptNum}" /></body></html>`;
 
-      document.body.appendChild(frame);
-      await new Promise<void>((resolve) => {
+      const readyToPrint = new Promise<void>((resolve) => {
         frame.onload = () => resolve();
       });
+      document.body.appendChild(frame);
+      await readyToPrint;
 
       frame.contentWindow?.focus();
       frame.contentWindow?.print();
-      window.setTimeout(() => frame.remove(), 1000);
+      window.setTimeout(() => frame.remove(), 1500);
       return;
     }
 
@@ -1132,9 +1152,9 @@ export function AppShell() {
     setReceiptActionLoading("print");
     try {
       setReceiptModalReceipt(null);
-      setPrintPreviewReceipt(receiptData ?? lastReceipt ?? null);
+      await exportReceiptImage(receiptData ?? lastReceipt ?? undefined, "print");
     } finally {
-      // cleared after the print dialog closes
+      setReceiptActionLoading(null);
     }
   }
 
@@ -1430,7 +1450,7 @@ export function AppShell() {
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => { setSalesHistoryScope("all"); setSalesSlotFilterId("all"); setCurrentPage("sales"); setSalesView("history"); }}
+                  onClick={() => { setCurrentPage("receipts"); }}
                   className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
                 >
                   All Past Receipts
@@ -1469,36 +1489,113 @@ export function AppShell() {
                 ))}
               </div>
 
-              <div className="space-y-3">
-                {getFilteredSalesHistoryItems().length === 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No sold items match your filters.</div>
-                ) : (
-                  getFilteredSalesHistoryItems().map((item) => (
-                    <div key={item.id} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
-                      <div>
-                        <div className="font-semibold text-white">{item.itemName} • No. {item.code}</div>
-                        <div className="text-sm text-slate-400">{formatDate(item.timestamp)} • {item.slotLabel}</div>
-                        <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">Qty: {item.qty}</div>
-                        <div className="mt-1 text-xs text-slate-500">Receipt {item.receiptNumber}</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const receipt = getFilteredSalesHistory().find((entry) => entry.receiptNumber === item.receiptNumber && getDateOnly(entry.timestamp) === getDateOnly(item.timestamp));
-                            if (receipt) setReceiptModalReceipt(receipt);
-                          }}
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
-                        >
-                          Open
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
+              <div className="space-y-4">
+                <div className="overflow-x-auto pb-2">
+                  <div className="flex min-w-max gap-3">
+                    {getSalesHistorySlotBuckets().length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No sold items match your filters.</div>
+                    ) : (
+                      getSalesHistorySlotBuckets().map(({ slot, items }) => (
+                        <section key={slot.id} className="w-[19rem] shrink-0 rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">{formatSlotLabel(slot)}</div>
+                              <div className="text-sm text-slate-400">Auto filtered slot chart</div>
+                            </div>
+                            <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{items.length} items</div>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {items.map((item) => (
+                              <div key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="font-semibold text-white">{item.itemName}</div>
+                                    <div className="text-xs text-slate-400">No. {item.code} • Receipt {item.receiptNumber}</div>
+                                  </div>
+                                  <div className="rounded-full bg-emerald-400/15 px-3 py-1 text-sm font-semibold text-emerald-300">Qty {item.qty}</div>
+                                </div>
+                                <div className="mt-2 text-xs text-slate-400">{formatDate(item.timestamp)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                  Scroll sideways to view each time slot. Each card lists the sold item, receipt number, quantity, and time.
+                </div>
               </div>
             </div>
           )}
+        </GlassCard>
+      )}
+
+      {currentPage === "receipts" && (
+        <GlassCard className="max-w-5xl mx-auto" title="All Receipts" subtitle="Every receipt with open and download actions.">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <input
+              value={salesReceiptSearch}
+              onChange={(event) => setSalesReceiptSearch(event.target.value)}
+              placeholder="Search by receipt no, item, or admin"
+              className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none sm:max-w-md"
+            />
+            <button
+              type="button"
+              onClick={() => setCurrentPage("settings")}
+              className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+            >
+              Back to Settings
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {getAllReceipts().filter((receipt) => {
+              const term = salesReceiptSearch.trim().toLowerCase();
+              if (!term) return true;
+              return receipt.receiptNumber.toLowerCase().includes(term)
+                || (receipt.heading ?? "").toLowerCase().includes(term)
+                || receipt.admin?.name?.toLowerCase().includes(term)
+                || toReceiptEntries(receipt).some((entry) => ITEM_LABELS[entry.itemKey].toLowerCase().includes(term) || entry.code.toLowerCase().includes(term));
+            }).length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No receipts found.</div>
+            ) : (
+              getAllReceipts().filter((receipt) => {
+                const term = salesReceiptSearch.trim().toLowerCase();
+                if (!term) return true;
+                return receipt.receiptNumber.toLowerCase().includes(term)
+                  || (receipt.heading ?? "").toLowerCase().includes(term)
+                  || receipt.admin?.name?.toLowerCase().includes(term)
+                  || toReceiptEntries(receipt).some((entry) => ITEM_LABELS[entry.itemKey].toLowerCase().includes(term) || entry.code.toLowerCase().includes(term));
+              }).map((receipt) => (
+                <div key={receipt.id} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                  <div>
+                    <div className="font-semibold text-white">Receipt {receipt.receiptNumber}</div>
+                    <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.admin?.name ?? "Admin"}</div>
+                    <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">{toReceiptEntries(receipt).map((entry) => `${ITEM_LABELS[entry.itemKey]} No. ${entry.code} Qty ${entry.qty}`).join(" • ")}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReceiptModalReceipt(receipt)}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void downloadReceiptImage(receipt)}
+                      className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-emerald-950"
+                    >
+                      Download
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </GlassCard>
       )}
 
@@ -1515,7 +1612,7 @@ export function AppShell() {
               <>
                 <button onClick={() => setCurrentPage("rates")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Change Rates</button>
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
-                <button onClick={() => { setCurrentPage("sales"); setSalesView("history"); setSalesHistoryScope("all"); setSalesSlotFilterId("all"); }} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">All Past Receipts</button>
+                <button onClick={() => setCurrentPage("receipts")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">All Past Receipts</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
               </>
@@ -1563,30 +1660,6 @@ export function AppShell() {
               >
                 {receiptActionLoading === "print" ? "Printing..." : "Print Receipt"}
               </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {printPreviewReceipt ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm print:items-start print:bg-white print:px-0 print:py-0">
-          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950 p-4 shadow-2xl shadow-black/50 print:max-w-none print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none">
-            <div className="mb-4 flex items-start justify-between gap-3 print:hidden">
-              <div>
-                <h3 className="text-xl font-semibold text-white">Print layout</h3>
-                <p className="text-sm text-slate-400">Connected printer dialog will open automatically.</p>
-              </div>
-              <button type="button" onClick={() => { setPrintPreviewReceipt(null); setReceiptActionLoading(null); }} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
-            </div>
-            <div className="mx-auto w-full max-w-[320px] rounded-[1.6rem] border border-slate-300 bg-white p-3 text-slate-900 print:max-w-none print:rounded-none print:border-0 print:p-0">
-              <div className="space-y-1 font-mono text-[10px] leading-[1.35]">
-                {buildReceiptLines({
-                  receiptNumber: printPreviewReceipt.receiptNumber,
-                  heading: printPreviewReceipt.heading ?? heading,
-                  timestamp: new Date(printPreviewReceipt.timestamp),
-                  entries: toReceiptEntries(printPreviewReceipt),
-                }).lines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
-              </div>
             </div>
           </div>
         </div>
