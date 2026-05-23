@@ -647,6 +647,7 @@ export function AppShell() {
         itemName: ITEM_LABELS[entry.itemKey],
         code: entry.code,
         qty: entry.qty,
+        shortLabel: `${entry.itemKey === "andar" ? "AN" : entry.itemKey === "bahar" ? "BH" : "RT"}-${entry.code}`,
       }));
     });
   }
@@ -664,7 +665,12 @@ export function AppShell() {
       }
     }
 
-    return buckets.filter((bucket) => bucket.items.length > 0);
+    return buckets
+      .filter((bucket) => bucket.items.length > 0)
+      .map((bucket) => ({
+        ...bucket,
+        items: [...bucket.items].sort((left, right) => right.qty - left.qty),
+      }));
   }
 
   function getAllReceipts() {
@@ -742,13 +748,7 @@ export function AppShell() {
         </div>
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
-          <div className="flex items-start gap-3">
-            <div>
-              <div className="text-sm uppercase tracking-[0.35em] text-slate-500">P...</div>
-              <h2 className="mt-1 text-2xl font-semibold text-white">{ROLE_LABELS[currentSession.role]} console</h2>
-              <p className="text-sm text-slate-400">Mobile POS mode for billing and counter entry.</p>
-            </div>
-          </div>
+          <div className="flex items-start gap-3" />
 
           {menuOpen && currentSession.role === "MASTER_ADMIN" && (
             <div className="mt-4 grid gap-2 rounded-3xl border border-white/10 bg-slate-950/95 p-2 text-sm text-white">
@@ -1613,7 +1613,7 @@ export function AppShell() {
                             {items.map((item) => (
                               <div key={item.id} className="grid grid-cols-[1.1fr_0.9fr_0.45fr_0.95fr] gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm">
                                 <div className="min-w-0">
-                                  <div className="truncate font-semibold text-white">{item.itemName} No. {item.code}</div>
+                                  <div className="truncate font-semibold text-white">{item.shortLabel}</div>
                                 </div>
                                 <div className="text-slate-300">{formatDate(item.timestamp)}</div>
                                 <div className="font-semibold text-emerald-300">{item.qty}</div>
