@@ -19,6 +19,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -303,7 +304,15 @@ public class BluetoothPrinterPlugin extends Plugin {
     private void writeToPrinter(BluetoothDevice device, byte[] bytes) throws Exception {
         BluetoothSocket socket = null;
         try {
-            socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
+            BluetoothAdapter adapter = getBluetoothAdapter();
+            if (adapter != null) {
+                try {
+                    adapter.cancelDiscovery();
+                } catch (SecurityException ignored) {
+                }
+            }
+
+            socket = connectSocket(device);
             socket.connect();
             OutputStream outputStream = socket.getOutputStream();
             outputStream.write(bytes);
@@ -322,6 +331,26 @@ public class BluetoothPrinterPlugin extends Plugin {
                 try {
                     socket.close();
                 } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    private BluetoothSocket connectSocket(BluetoothDevice device) throws Exception {
+        try {
+            return device.createRfcommSocketToServiceRecord(SPP_UUID);
+        } catch (Exception firstError) {
+            try {
+                return device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
+            } catch (Exception secondError) {
+                try {
+                    Method method = device.getClass().getMethod("createRfcommSocket", int.class);
+                    return (BluetoothSocket) method.invoke(device, 1);
+                } catch (Exception thirdError) {
+                    if (secondError != null) {
+                        throw secondError;
+                    }
+                    throw firstError;
                 }
             }
         }
