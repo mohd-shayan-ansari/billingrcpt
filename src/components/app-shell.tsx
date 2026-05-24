@@ -1082,13 +1082,14 @@ export function AppShell() {
                           key={`${category}-${code}`}
                           type="button"
                           onClick={() => incrementCodeQuantity(category, code)}
-                          className={`relative aspect-[0.92] rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
+                          className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
                         >
-                          <div className="flex h-full flex-col justify-between">
-                            <div className="rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 p-4 text-center text-emerald-300">{(category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT')}-{code}</div>
-                            <div>
-                              <div className="font-semibold text-white">{formatCurrency(rates[category])}</div>
-                              <div className="text-xs uppercase tracking-[0.25em] text-slate-400">{ITEM_LABELS[category]}</div>
+                          <div className="flex h-full flex-col justify-between gap-2">
+                            <div className="flex flex-1 items-center justify-center rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 px-2 text-center text-emerald-300">
+                              <span className="whitespace-nowrap text-[0.95rem] font-semibold leading-none">{(category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT')}-{code}</span>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-sm font-semibold leading-none text-white">{formatCurrency(rates[category])}</div>
                             </div>
                           </div>
                           {isSelected ? <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-400 px-1 text-xs font-bold text-slate-950">{qty}</span> : null}
