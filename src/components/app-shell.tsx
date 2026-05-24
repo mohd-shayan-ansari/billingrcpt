@@ -9,8 +9,9 @@ import { Share } from "@capacitor/share";
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
+import { nativeReceiptPrintController } from "@/lib/printer/native-receipt-print-controller";
 import { receiptPrintController } from "@/lib/printer/receipt-print-controller";
-import type { PaperWidth, PrinterDevice, PrinterSettings, PrinterStatus } from "@/lib/printer/types";
+import type { PaperWidth, PrinterDevice, PrinterSettings, PrinterStatus, ReceiptLike } from "@/lib/printer/types";
 
 type SessionUser = {
   id: string;
@@ -184,7 +185,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts" | "printer-settings">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts" | "printer-settings" | "printer-test">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(getLocalDateString());
@@ -209,6 +210,7 @@ export function AppShell() {
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [printPreviewReceipt, setPrintPreviewReceipt] = useState<ReceiptRecord | null>(null);
+  const [printPreviewError, setPrintPreviewError] = useState<string | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | "print" | null>(null);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
   const [printerDevices, setPrinterDevices] = useState<PrinterDevice[]>([]);
@@ -236,6 +238,20 @@ export function AppShell() {
 
     const data = (await response.json()) as { winners: Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }> };
     setWinnerRecords(data.winners || []);
+  }
+
+  async function refreshPrinterState() {
+    try {
+      const [status, settings] = await Promise.all([
+        receiptPrintController.getStatus(),
+        receiptPrintController.getSettings(),
+      ]);
+
+      setPrinterStatus(status);
+      setPrinterSettings(settings);
+    } catch (error) {
+      setPrinterMessage(error instanceof Error ? error.message : "Unable to load printer status");
+    }
   }
 
   const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
@@ -369,7 +385,7 @@ export function AppShell() {
 
   useEffect(() => {
     let active = true;
-    if (currentPage === "printer-settings") {
+    if (currentPage === "printer-settings" || currentPage === "printer-test") {
       void (async () => {
         setPrinterLoading(true);
         setPrinterMessage(null);
@@ -434,6 +450,8 @@ export function AppShell() {
           const receiptsData = (await receiptsResponse.json()) as { receipts: ReceiptRecord[] };
           setReceipts(receiptsData.receipts);
         }
+
+        await refreshPrinterState();
 
         // Master admin uses server-side totals; counter admin uses their own receipts.
         if (data.user.role === "MASTER_ADMIN") {
@@ -821,6 +839,38 @@ export function AppShell() {
       .reduce((sum, winner) => sum + winner.amount, 0);
   }
 
+  function getPrinterStateLabel() {
+    if (!printerStatus) {
+      return "Loading printer status";
+    }
+
+    if (!printerStatus.bluetoothEnabled) {
+      return "Bluetooth disabled";
+    }
+
+    if (printerStatus.connected) {
+      return "Connected";
+    }
+
+    if (printerStatus.savedPrinter) {
+      return "Saved";
+    }
+
+    return "Not paired";
+  }
+
+  function getPrinterStateDetail() {
+    if (printerMessage) {
+      return printerMessage;
+    }
+
+    if (!printerStatus) {
+      return "Loading current printer status...";
+    }
+
+    return printerStatus.message;
+  }
+
   async function savePrinterDevice(device: Pick<PrinterSettings, "name" | "address"> & Partial<PrinterSettings>) {
     setPrinterMessage(null);
 
@@ -892,6 +942,23 @@ export function AppShell() {
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="Today Receipts" value={String(todayReceiptCountValue)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
+        </div>
+
+        <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Printer State</div>
+              <div className="mt-1 text-2xl font-semibold text-white">{getPrinterStateLabel()}</div>
+              <div className="text-sm text-slate-400">{getPrinterStateDetail()}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCurrentPage("printer-settings")}
+              className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm font-semibold text-white"
+            >
+              Printer Settings
+            </button>
+          </div>
         </div>
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
@@ -1381,9 +1448,24 @@ export function AppShell() {
     await exportReceiptImage(receiptData, "download");
   }
 
+  async function printReceiptViaSystem(receiptData?: ReceiptRecord | ReceiptLike) {
+    const receiptToPrint = receiptData ?? lastReceipt;
+    if (!receiptToPrint) {
+      throw new Error("No receipt available to print");
+    }
+
+    if (Capacitor.isNativePlatform()) {
+      await nativeReceiptPrintController.printReceipt(receiptToPrint, printerSettings?.paperWidthMm ?? 58);
+      return;
+    }
+
+    await exportReceiptImage(receiptToPrint as ReceiptRecord, "print");
+  }
+
   async function printReceiptImage(receiptData?: ReceiptRecord) {
     setReceiptActionLoading("print");
     setMessage(null);
+    setPrintPreviewError(null);
     try {
       const receiptToPrint = receiptData ?? lastReceipt;
       if (!receiptToPrint) {
@@ -1400,10 +1482,26 @@ export function AppShell() {
       setPrintPreviewReceipt(null);
       setMessage(Capacitor.isNativePlatform() ? "Print job sent to Bluetooth printer" : "Print job sent");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Print failed");
+      const rawMessage = error instanceof Error ? error.message : "Print failed";
+      const printableMessage = /bluetooth|socket|connect|paired|discovery/i.test(rawMessage)
+        ? rawMessage
+        : "Printer paired but not responding. Check Bluetooth connection and try again.";
+      setPrintPreviewError(printableMessage);
+      setMessage(printableMessage);
     } finally {
       setReceiptActionLoading(null);
     }
+  }
+
+  async function retryPreviewPrint() {
+    await printReceiptImage(printPreviewReceipt ?? receiptModalReceipt ?? lastReceipt ?? undefined);
+  }
+
+  function reselectPrinterFromPreview() {
+    setPrintPreviewError(null);
+    setReceiptModalReceipt(null);
+    setPrintPreviewReceipt(null);
+    setCurrentPage("printer-settings");
   }
 
   async function saveRates() {
@@ -2083,7 +2181,7 @@ export function AppShell() {
               <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
                 <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Status</div>
                 <div className="mt-2 text-lg font-semibold text-white">
-                  {printerLoading ? "Loading printer status..." : printerStatus?.message ?? "Printer not configured"}
+                  {printerLoading ? "Loading printer status..." : `${getPrinterStateLabel()} • ${printerStatus?.message ?? "Printer not configured"}`}
                 </div>
                 <div className="mt-2 text-sm text-slate-400">
                   {printerStatus?.savedPrinter
@@ -2093,6 +2191,7 @@ export function AppShell() {
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => void handleTestPrint()} className="rounded-[1.2rem] bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Test Print</button>
+                <button type="button" onClick={() => setCurrentPage("printer-test")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Open Test Screen</button>
                 <button type="button" onClick={() => setCurrentPage("settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Back</button>
               </div>
             </div>
@@ -2139,6 +2238,57 @@ export function AppShell() {
         </GlassCard>
       )}
 
+      {currentPage === "printer-test" && (
+        <GlassCard className="max-w-5xl mx-auto" title="Printer Test" subtitle="Print a sample receipt and confirm the Bluetooth connection before using a real receipt.">
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+                <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Printer State</div>
+                <div className="mt-2 text-lg font-semibold text-white">{getPrinterStateLabel()}</div>
+                <div className="mt-2 text-sm text-slate-400">{getPrinterStateDetail()}</div>
+                <div className="mt-3 text-xs text-slate-500">Saved printer: {printerStatus?.savedPrinter ? `${printerStatus.savedPrinter.name} • ${printerStatus.savedPrinter.paperWidthMm}mm` : "None"}</div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => void handleTestPrint()} className="rounded-[1.2rem] bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Test Bluetooth Print</button>
+                <button type="button" onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Printer Settings</button>
+                <button type="button" onClick={() => setCurrentPage("settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Back</button>
+              </div>
+            </div>
+
+            {printerMessage ? <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{printerMessage}</div> : null}
+
+            <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                <div>
+                  <div className="text-sm font-semibold text-white">Sample Receipt</div>
+                  <div className="text-xs text-slate-400">A small receipt is used to check the connected printer.</div>
+                </div>
+                <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">Test print</div>
+              </div>
+              <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-4 text-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+                <div className="mx-auto max-w-[280px] space-y-1 font-mono text-[18px] leading-[1.35] text-center">
+                  {buildReceiptLines({
+                    receiptNumber: "TEST-001",
+                    heading: heading,
+                    timestamp: new Date(),
+                    entries: [
+                      { itemKey: "andar", code: "1", qty: 1, rate: rates.andar, amount: rates.andar },
+                    ],
+                  }).lines.map((line, index) => (
+                    <div key={`${line}-${index}`}>{line}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <button type="button" onClick={() => void handleTestPrint()} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Bluetooth Test Print</button>
+                <button type="button" onClick={() => void printReceiptViaSystem({ receiptNumber: "TEST-001", heading, timestamp: new Date().toISOString(), entries: [{ itemKey: "andar", code: "1", qty: 1, rate: rates.andar, amount: rates.andar }], totalAmount: rates.andar })} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">System Print Preview</button>
+                <button type="button" onClick={() => void downloadReceiptImage({ receiptNumber: "TEST-001", heading, timestamp: new Date().toISOString(), entries: [{ itemKey: "andar", code: "1", qty: 1, rate: rates.andar, amount: rates.andar }], totalAmount: rates.andar } as ReceiptRecord)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Share / Save</button>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
       {currentPage === "dashboard" && renderMobileDashboard()}
 
       {currentPage === "settings" && (
@@ -2154,11 +2304,16 @@ export function AppShell() {
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
                 <button onClick={() => setCurrentPage("receipts")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">All Past Receipts</button>
                 <button onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Settings</button>
+                <button onClick={() => setCurrentPage("printer-test")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Test</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
               </>
             ) : (
-              <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
+              <>
+                <button onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Settings</button>
+                <button onClick={() => setCurrentPage("printer-test")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Test</button>
+                <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
+              </>
             )}
           </div>
         </div>
@@ -2195,7 +2350,10 @@ export function AppShell() {
               </button>
               <button
                 type="button"
-                onClick={() => setPrintPreviewReceipt(receiptModalReceipt)}
+                onClick={() => {
+                  setPrintPreviewError(null);
+                  setPrintPreviewReceipt(receiptModalReceipt);
+                }}
                 disabled={receiptActionLoading === "print"}
                 className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950 disabled:opacity-60"
               >
@@ -2214,7 +2372,13 @@ export function AppShell() {
                 <h3 className="text-xl font-semibold text-white">Print Preview</h3>
                 <p className="text-sm text-slate-400">Review the receipt before printing.</p>
               </div>
-              <button type="button" onClick={() => setPrintPreviewReceipt(null)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+              <button type="button" onClick={() => { setPrintPreviewError(null); setPrintPreviewReceipt(null); }} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
+            </div>
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                <span className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 font-semibold text-white">{getPrinterStateLabel()}</span>
+                <span>{getPrinterStateDetail()}</span>
+              </div>
             </div>
             <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-4 text-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
               <div className="mx-auto max-w-[280px] space-y-1 font-mono text-[18px] leading-[1.35] text-center">
@@ -2228,10 +2392,18 @@ export function AppShell() {
                 ))}
               </div>
             </div>
+
+            {printPreviewError ? (
+              <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+                <div className="font-semibold">Print failed</div>
+                <div className="mt-1">{printPreviewError}</div>
+              </div>
+            ) : null}
+
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setPrintPreviewReceipt(null)}
+                onClick={() => { setPrintPreviewError(null); setPrintPreviewReceipt(null); }}
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
               >
                 Cancel
@@ -2241,9 +2413,42 @@ export function AppShell() {
                 onClick={() => void printReceiptImage(printPreviewReceipt)}
                 className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950"
               >
-                Print
+                {printPreviewError ? "Retry" : "Print"}
               </button>
             </div>
+
+            {printPreviewError ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void retryPreviewPrint()}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+                >
+                  Retry Bluetooth Print
+                </button>
+                <button
+                  type="button"
+                  onClick={reselectPrinterFromPreview}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+                >
+                  Re-select Printer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void printReceiptViaSystem(printPreviewReceipt)}
+                  className="rounded-2xl bg-amber-300 px-4 py-3 text-sm font-semibold text-slate-950"
+                >
+                  System Print Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void downloadReceiptImage(printPreviewReceipt)}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+                >
+                  Share / Save
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
