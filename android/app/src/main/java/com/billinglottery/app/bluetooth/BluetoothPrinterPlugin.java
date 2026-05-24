@@ -378,7 +378,7 @@ public class BluetoothPrinterPlugin extends Plugin {
         writeLine(output, "Time: " + formatTime(timestamp));
         writeLine(output, divider(columns));
         writeBytes(output, alignLeft());
-        writeLine(output, formatHeader(columns));
+        writeLine(output, formatHeader());
 
         JSONArray items = payload.optJSONArray("items");
         if (items != null) {
@@ -390,15 +390,14 @@ public class BluetoothPrinterPlugin extends Plugin {
                 double rate = item.optDouble("rate", 0);
                 double amount = item.optDouble("amount", rate * qty);
 
-                writeLine(output, fit(itemName + " No. " + code, columns));
-                writeLine(output, formatColumns(columns, "Qty " + qty + " x " + formatMoney(rate), formatMoney(amount)));
+                writeLine(output, formatReceiptRow(itemName + "-" + code, String.valueOf(qty), formatRate(rate), formatAmount(amount)));
             }
         }
 
         writeLine(output, divider(columns));
         writeBytes(output, alignCenter());
         writeBytes(output, boldOn());
-        writeLine(output, "Final Total: " + formatMoney(payload.optDouble("totalAmount", 0)));
+        writeLine(output, "Final Total: " + formatAmount(payload.optDouble("totalAmount", 0)));
         writeBytes(output, boldOff());
         writeLine(output, footerMessage);
 
@@ -430,12 +429,12 @@ public class BluetoothPrinterPlugin extends Plugin {
         writeLine(output, "Printer Test");
         writeLine(output, divider(columns));
         writeBytes(output, alignLeft());
-        writeLine(output, formatColumns(columns, "Test item", "Rs. 1.00"));
-        writeLine(output, formatColumns(columns, "Qty 1 x Rs. 1.00", "Rs. 1.00"));
+        writeLine(output, formatHeader());
+        writeLine(output, formatReceiptRow("Test-1", "1", "1.00", "₹1"));
         writeLine(output, divider(columns));
         writeBytes(output, alignCenter());
         writeBytes(output, boldOn());
-        writeLine(output, "Final Total: Rs. 1.00");
+        writeLine(output, "Final Total: ₹1");
         writeBytes(output, boldOff());
         writeLine(output, "Test print successful.");
         writeBytes(output, cutPaper());
@@ -475,16 +474,12 @@ public class BluetoothPrinterPlugin extends Plugin {
         return repeat('-', columns);
     }
 
-    private String formatHeader(int columns) {
-        int amountWidth = 10;
-        int leftWidth = Math.max(10, columns - amountWidth);
-        return padRight("Item / Qty / Rate", leftWidth) + padLeft("Total", amountWidth);
+    private String formatHeader() {
+        return centerLine("No.", 6) + centerLine("Qty", 5) + centerLine("Rate", 8) + centerLine("Total", 9);
     }
 
-    private String formatColumns(int columns, String left, String right) {
-        int rightWidth = Math.max(9, columns >= 48 ? 12 : 10);
-        int leftWidth = Math.max(10, columns - rightWidth);
-        return padRight(left, leftWidth) + padLeft(right, rightWidth);
+    private String formatReceiptRow(String no, String qty, String rate, String total) {
+        return centerLine(no, 6) + centerLine(qty, 5) + centerLine(rate, 8) + centerLine(total, 9);
     }
 
     private String fit(String text, int width) {
@@ -521,8 +516,23 @@ public class BluetoothPrinterPlugin extends Plugin {
         return builder.toString();
     }
 
-    private String formatMoney(double value) {
-        return String.format(Locale.ENGLISH, "Rs. %.0f", value);
+    private String formatRate(double value) {
+        return String.format(Locale.ENGLISH, "%.2f", value);
+    }
+
+    private String formatAmount(double value) {
+        return String.format(Locale.ENGLISH, "₹%.0f", value);
+    }
+
+    private String centerLine(String text, int width) {
+        String value = text == null ? "" : text;
+        if (value.length() >= width) {
+            return value.substring(0, width);
+        }
+
+        int paddingLeft = Math.max(0, (width - value.length()) / 2);
+        int paddingRight = Math.max(0, width - value.length() - paddingLeft);
+        return repeat(' ', paddingLeft) + value + repeat(' ', paddingRight);
     }
 
     private String formatDate(String timestamp) {
