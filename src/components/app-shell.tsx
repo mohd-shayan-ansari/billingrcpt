@@ -2366,8 +2366,8 @@ export function AppShell() {
       ) : null}
 
       {printPreviewReceipt ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm print:hidden">
-          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950/95 p-4 shadow-2xl shadow-black/50">
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/70 px-4 py-6 backdrop-blur-sm print:hidden">
+          <div className="my-auto w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950/95 p-4 shadow-2xl shadow-black/50 max-h-[calc(100vh-3rem)] overflow-y-auto">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-xl font-semibold text-white">Print Preview</h3>
