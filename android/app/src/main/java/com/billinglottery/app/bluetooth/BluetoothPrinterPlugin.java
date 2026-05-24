@@ -584,14 +584,28 @@ public class BluetoothPrinterPlugin extends Plugin {
             return "Print failed";
         }
 
-        if (message.toLowerCase(Locale.ENGLISH).contains("bluetooth")) {
+        String lower = message.toLowerCase(Locale.ENGLISH);
+
+        if (lower.contains("discovery") || lower.contains("scanning")) {
+            return "Bluetooth discovery is still active. Stop scanning and try printing again.";
+        }
+
+        if (lower.contains("socket") || lower.contains("read failed") || lower.contains("failed to connect") || lower.contains("connection")) {
+            return "Printer paired but not responding. Re-select the printer or turn it off and on again.";
+        }
+
+        if (lower.contains("permission")) {
+            return "Bluetooth permission required. Allow Bluetooth and try again.";
+        }
+
+        if (lower.contains("bluetooth")) {
             return message;
         }
 
-        if (message.toLowerCase(Locale.ENGLISH).contains("printer")) {
+        if (lower.contains("printer")) {
             return message;
         }
 
-        return "Print failed";
+        return "Print failed. Re-select the printer or try system print preview.";
     }
 }
