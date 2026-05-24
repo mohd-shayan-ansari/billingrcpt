@@ -640,8 +640,14 @@ export function AppShell() {
     setEntries([newEntry("andar")]);
     setMessage(`Receipt ${data.receipt.receiptNumber} created`);
     await refreshReceipts();
-    
-    downloadReceiptImage(data.receipt);
+
+    try {
+      await receiptPrintController.printReceipt(data.receipt);
+      setMessage(`Receipt ${data.receipt.receiptNumber} created and printed`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setMessage(`Receipt saved, but print failed: ${message}`);
+    }
   }
 
   function updateEntry(entryId: string, patch: Partial<ReceiptEntryDraft>) {
@@ -1223,13 +1229,20 @@ export function AppShell() {
       }
 
       setLastReceipt(data.receipt);
-      setReceiptModalReceipt(data.receipt);
       setCodeQuantities({ andar: {}, bahar: {}, result: {} });
-      setMessage(`Receipt ${data.receipt.receiptNumber} created`);
       await refreshReceipts();
 
       if (autoDownload) {
-        void downloadReceiptImage(data.receipt);
+        try {
+          await receiptPrintController.printReceipt(data.receipt);
+          setMessage(`Receipt ${data.receipt.receiptNumber} created and printed`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setMessage(`Receipt saved, but print failed: ${message}`);
+        }
+      } else {
+        setReceiptModalReceipt(data.receipt);
+        setMessage(`Receipt ${data.receipt.receiptNumber} created`);
       }
     } finally {
       setReceiptActionLoading(null);
