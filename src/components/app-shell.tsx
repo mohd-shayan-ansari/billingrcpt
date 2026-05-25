@@ -618,7 +618,7 @@ export function AppShell() {
     await refreshReceipts();
   }
 
-  async function saveAndPrint() {
+  async function saveAndShare() {
     setMessage(null);
 
     const response = await fetch("/api/receipts", {
@@ -642,11 +642,11 @@ export function AppShell() {
     await refreshReceipts();
 
     try {
-      await receiptPrintController.printReceipt(data.receipt);
-      setMessage(`Receipt ${data.receipt.receiptNumber} created and printed`);
+      await exportReceiptImage(data.receipt, "share");
+      setMessage(`Receipt ${data.receipt.receiptNumber} created and shared`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setMessage(`Receipt saved, but print failed: ${message}`);
+      setMessage(`Receipt saved, but share failed: ${message}`);
     }
   }
 
@@ -1060,7 +1060,7 @@ export function AppShell() {
               <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={addEntryRow} className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white">Add line</button>
                 <button type="button" onClick={submitReceipt} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200">Save</button>
-                <button type="button" onClick={saveAndPrint} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">Save &amp; Print</button>
+                <button type="button" onClick={saveAndShare} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">Save &amp; Share</button>
               </div>
             </div>
           </section>
@@ -1296,7 +1296,7 @@ export function AppShell() {
     return savedEntries;
   }
 
-  async function exportReceiptImage(receiptData?: ReceiptRecord, mode: "download" | "print" = "download") {
+  async function exportReceiptImage(receiptData?: ReceiptRecord, mode: "download" | "share" | "print" = "download") {
     let preview;
 
     if (receiptData) {
@@ -1431,20 +1431,34 @@ export function AppShell() {
     if (Capacitor.isNativePlatform()) {
       const base64Data = dataUrl.split(",")[1] || "";
       const path = `receipts/${receiptNum}.png`;
+
+      if (mode === "share") {
+        await Filesystem.writeFile({
+          path,
+          data: base64Data,
+          directory: Directory.Cache,
+          recursive: true,
+        });
+
+        const fileUri = await Filesystem.getUri({ path, directory: Directory.Cache });
+        await Share.share({
+          title: receiptNum,
+          text: `Receipt ${receiptNum}`,
+          url: fileUri.uri,
+          dialogTitle: "Share receipt",
+        });
+        return;
+      }
+
       await Filesystem.writeFile({
         path,
         data: base64Data,
-        directory: Directory.Cache,
+        directory: Directory.Documents,
         recursive: true,
       });
 
-      const fileUri = await Filesystem.getUri({ path, directory: Directory.Cache });
-      await Share.share({
-        title: receiptNum,
-        text: `Receipt ${receiptNum}`,
-        url: fileUri.uri,
-        dialogTitle: "Save or share receipt",
-      });
+      const fileUri = await Filesystem.getUri({ path, directory: Directory.Documents });
+      setMessage(`Receipt saved to device: ${fileUri.uri}`);
       return;
     }
 
