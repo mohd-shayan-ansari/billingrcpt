@@ -2279,7 +2279,7 @@ export function AppShell() {
               >
                 Download
               </button>
-              <button type="button" onClick={() => void saveAndShare()} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Share</button>
+              <button type="button" onClick={() => void exportReceiptImage(receiptModalReceipt, "share")} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Share</button>
             </div>
           </div>
         </div>
