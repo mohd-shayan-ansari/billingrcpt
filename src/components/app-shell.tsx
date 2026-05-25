@@ -9,8 +9,7 @@ import { Share } from "@capacitor/share";
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
-import { receiptPrintController } from "@/lib/printer/receipt-print-controller";
-import type { PaperWidth, PrinterDevice, PrinterSettings, PrinterStatus, ReceiptLike } from "@/lib/printer/types";
+import type { ReceiptLike } from "@/lib/printer/types";
 
 type SessionUser = {
   id: string;
@@ -184,7 +183,7 @@ export function AppShell() {
   const [adminForm, setAdminForm] = useState({ name: "", password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts" | "printer-settings" | "printer-test">("dashboard");
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts">("dashboard");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", selectedUserId: "self" });
   const [nextReceiptNumber, setNextReceiptNumber] = useState<string>("PENDING");
   const [salesDate, setSalesDate] = useState(getLocalDateString());
@@ -209,11 +208,6 @@ export function AppShell() {
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | null>(null);
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
-  const [printerDevices, setPrinterDevices] = useState<PrinterDevice[]>([]);
-  const [printerSettings, setPrinterSettings] = useState<PrinterSettings | null>(null);
-  const [printerLoading, setPrinterLoading] = useState(false);
-  const [printerMessage, setPrinterMessage] = useState<string | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "password" | null>(null);
 
   async function refreshSalesReport(date = salesDate) {
@@ -235,20 +229,6 @@ export function AppShell() {
 
     const data = (await response.json()) as { winners: Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }> };
     setWinnerRecords(data.winners || []);
-  }
-
-  async function refreshPrinterState() {
-    try {
-      const [status, settings] = await Promise.all([
-        receiptPrintController.getStatus(),
-        receiptPrintController.getSettings(),
-      ]);
-
-      setPrinterStatus(status);
-      setPrinterSettings(settings);
-    } catch (error) {
-      setPrinterMessage(error instanceof Error ? error.message : "Unable to load printer status");
-    }
   }
 
   const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
@@ -381,42 +361,6 @@ export function AppShell() {
   }, [counterAdminUsers, winnerForm.counterHeading]);
 
   useEffect(() => {
-    let active = true;
-    if (currentPage === "printer-settings" || currentPage === "printer-test") {
-      void (async () => {
-        setPrinterLoading(true);
-        setPrinterMessage(null);
-        try {
-          await receiptPrintController.requestPermissions();
-          const [status, devices, settings] = await Promise.all([
-            receiptPrintController.getStatus(),
-            receiptPrintController.getPairedPrinters(),
-            receiptPrintController.getSettings(),
-          ]);
-
-          if (active) {
-            setPrinterStatus(status);
-            setPrinterDevices(devices);
-            setPrinterSettings(settings);
-          }
-        } catch (error) {
-          if (active) {
-            setPrinterMessage(error instanceof Error ? error.message : "Unable to load printers");
-          }
-        } finally {
-          if (active) {
-            setPrinterLoading(false);
-          }
-        }
-      })();
-    }
-
-    return () => {
-      active = false;
-    };
-  }, [currentPage]);
-
-  useEffect(() => {
     void (async () => {
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
@@ -447,8 +391,6 @@ export function AppShell() {
           const receiptsData = (await receiptsResponse.json()) as { receipts: ReceiptRecord[] };
           setReceipts(receiptsData.receipts);
         }
-
-        await refreshPrinterState();
 
         // Master admin uses server-side totals; counter admin uses their own receipts.
         if (data.user.role === "MASTER_ADMIN") {
@@ -517,79 +459,25 @@ export function AppShell() {
     setUsers(data.users);
   }
 
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage(null);
-
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(loginForm),
-    });
-
-    const data = (await response.json().catch(() => ({}))) as { user?: SessionUser; error?: string };
-
-    if (!response.ok || !data.user) {
-      setMessage(data.error ?? "Login failed");
-      return;
-    }
-
-    setSession(data.user);
-    setMessage(`Welcome, ${data.user.name}`);
-    
-    // Set fixed counter heading for counter admins
-    if (data.user.role === "COUNTER_ADMIN") {
-      const counterNum = data.user.name.match(/\d+/)?.[0];
-      setHeading(counterNum ? `Counter ${counterNum.padStart(2, "0")}` : "Counter 01");
-    }
-    
-    await Promise.all([refreshRates(), refreshReceipts(), refreshUsers()]);
-  }
-
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setSession(null);
-    setEntries([newEntry("andar")]);
-    setReceipts([]);
-    setUsers([]);
-    setMessage("Signed out");
-  }
-
-  function computeEntryAmount(entry: ReceiptEntryDraft) {
-    if (!entry.code) {
-      return 0;
-    }
-
-    return rates[entry.itemKey] * entry.qty;
-  }
-
-  function calculateTotal() {
-    return entries.reduce((sum, entry) => sum + computeEntryAmount(entry), 0);
-  }
-
-  function getPreview() {
-    return buildReceiptLines({
-      receiptNumber: nextReceiptNumber,
-      heading,
-      timestamp: new Date(),
-      entries: entries
-        .map((entry) => {
-          if (!entry.code || !entry.qty) {
-            return null;
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const resp = await fetch(`/api/receipts/next?heading=${encodeURIComponent(heading)}`, { cache: "no-store" });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (active && data?.receiptNumber) {
+            setNextReceiptNumber(String(data.receiptNumber));
           }
-
-          const rate = rates[entry.itemKey];
-          return {
-            itemKey: entry.itemKey,
-            code: entry.code,
-            qty: entry.qty,
-            rate,
-            amount: rate * entry.qty,
-          };
-        })
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
-    });
-  }
+        }
+      } catch {
+        if (active) {
+          setNextReceiptNumber("PENDING");
+        }
+      }
+    })();
+    return () => { active = false; };
+  }, [heading, lastReceipt]);
 
   async function submitReceipt() {
     setMessage(null);
@@ -842,71 +730,6 @@ export function AppShell() {
       .reduce((sum, winner) => sum + winner.amount, 0);
   }
 
-  function getPrinterStateLabel() {
-    if (!printerStatus) {
-      return "Loading printer status";
-    }
-
-    if (!printerStatus.bluetoothEnabled) {
-      return "Bluetooth disabled";
-    }
-
-    if (printerStatus.connected) {
-      return "Connected";
-    }
-
-    if (printerStatus.savedPrinter) {
-      return "Saved";
-    }
-
-    return "Not paired";
-  }
-
-  function getPrinterStateDetail() {
-    if (printerMessage) {
-      return printerMessage;
-    }
-
-    if (!printerStatus) {
-      return "Loading current printer status...";
-    }
-
-    return printerStatus.message;
-  }
-
-  async function savePrinterDevice(device: Pick<PrinterSettings, "name" | "address"> & Partial<PrinterSettings>) {
-    setPrinterMessage(null);
-
-    try {
-      const nextSettings = await receiptPrintController.saveSettings({
-        name: device.name,
-        address: device.address,
-        paperWidthMm: printerSettings?.paperWidthMm ?? 58,
-        autoCut: printerSettings?.autoCut ?? true,
-        qrText: printerSettings?.qrText ?? null,
-        logoBase64: printerSettings?.logoBase64 ?? null,
-      });
-
-      setPrinterSettings(nextSettings);
-      setPrinterStatus(await receiptPrintController.getStatus());
-      setMessage(`Printer saved: ${device.name}`);
-    } catch (error) {
-      setPrinterMessage(error instanceof Error ? error.message : "Unable to save printer");
-    }
-  }
-
-  async function updatePrinterPaperWidth(paperWidthMm: PaperWidth) {
-    if (!printerSettings) {
-      return;
-    }
-
-    await savePrinterDevice({
-      name: printerSettings.name,
-      address: printerSettings.address,
-      paperWidthMm,
-    });
-  }
-
   function incrementCodeQuantity(category: (typeof RECEIPT_KEYS)[number], code: string) {
     adjustCodeQty(category, code, 1);
     setPosScreen("catalog");
@@ -935,23 +758,6 @@ export function AppShell() {
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="Today Receipts" value={String(todayReceiptCountValue)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
-        </div>
-
-        <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Printer State</div>
-              <div className="mt-1 text-2xl font-semibold text-white">{getPrinterStateLabel()}</div>
-              <div className="text-sm text-slate-400">{getPrinterStateDetail()}</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setCurrentPage("printer-settings")}
-              className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm font-semibold text-white"
-            >
-              Printer Settings
-            </button>
-          </div>
         </div>
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
@@ -1006,7 +812,7 @@ export function AppShell() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-right text-sm text-slate-300">
                 Total
-                <div className="text-xl font-semibold text-emerald-300">{formatCurrency(calculateTotal())}</div>
+                <div className="text-xl font-semibold text-emerald-300">{formatCurrency(calculateTotalFromQuantities())}</div>
               </div>
             </div>
 
@@ -1038,7 +844,7 @@ export function AppShell() {
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                     <input value={entry.code} onChange={(event) => updateEntry(entry.id, { code: event.target.value })} className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Code" />
                     <input type="number" min={0} value={entry.qty || ""} onChange={(event) => updateEntry(entry.id, { qty: Number(event.target.value) || 0 })} className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Qty" />
-                    <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-right text-slate-300 md:col-span-1">{formatCurrency(computeEntryAmount(entry))}</div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-right text-slate-300 md:col-span-1">{formatCurrency(rates[entry.itemKey] * (entry.qty || 0))}</div>
                   </div>
                   <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Line {index + 1}</div>
                 </div>
@@ -1052,59 +858,58 @@ export function AppShell() {
             </div>
           </section>
         ) : (
-          <>
-            <section className="space-y-4">
+          <section className="space-y-4">
               {posScreen === "catalog" ? (
                 <>
-              {visibleCategories.map((category) => (
-                <div key={category} className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">{ITEM_LABELS[category]}</h3>
-                      <p className="text-sm text-slate-400">Tap a card to add it to the cart.</p>
+                  {visibleCategories.map((category) => (
+                    <div key={category} className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-4 shadow-2xl shadow-black/20">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-xl font-semibold text-white">{ITEM_LABELS[category]}</h3>
+                          <p className="text-sm text-slate-400">Tap a card to add it to the cart.</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Rate <span className="font-semibold text-emerald-300">{formatCurrency(rates[category])}</span></div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                        {POS_CODE_GRID[category].map((code) => {
+                          const qty = getSelectedQuantity(category, code);
+                          const isSelected = qty > 0;
+                          return (
+                            <button
+                              key={`${category}-${code}`}
+                              type="button"
+                              onClick={() => incrementCodeQuantity(category, code)}
+                              className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
+                            >
+                              <div className="flex h-full flex-col justify-between gap-2">
+                                <div className="flex flex-1 items-center justify-center rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 px-2 text-center text-emerald-300">
+                                  <span className="whitespace-nowrap text-[0.95rem] font-semibold leading-none">{(category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT')}-{code}</span>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-sm font-semibold leading-none text-white">{formatCurrency(rates[category])}</div>
+                                </div>
+                              </div>
+                              {isSelected ? <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-400 px-1 text-xs font-bold text-slate-950">{qty}</span> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Rate <span className="font-semibold text-emerald-300">{formatCurrency(rates[category])}</span></div>
-                  </div>
+                  ))}
 
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                    {POS_CODE_GRID[category].map((code) => {
-                      const qty = getSelectedQuantity(category, code);
-                      const isSelected = qty > 0;
-                      return (
-                        <button
-                          key={`${category}-${code}`}
-                          type="button"
-                          onClick={() => incrementCodeQuantity(category, code)}
-                          className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
-                        >
-                          <div className="flex h-full flex-col justify-between gap-2">
-                            <div className="flex flex-1 items-center justify-center rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 px-2 text-center text-emerald-300">
-                              <span className="whitespace-nowrap text-[0.95rem] font-semibold leading-none">{(category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT')}-{code}</span>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-sm font-semibold leading-none text-white">{formatCurrency(rates[category])}</div>
-                            </div>
-                          </div>
-                          {isSelected ? <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-400 px-1 text-xs font-bold text-slate-950">{qty}</span> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => setPosScreen("cart")}
-                className="fixed bottom-24 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-2xl shadow-emerald-500/20"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
-                  <span className="text-base">View Cart — {formatCurrency(total)}</span>
-                  <span>›</span>
-                </div>
-              </button>
-              </>
+                  <button
+                    type="button"
+                    onClick={() => setPosScreen("cart")}
+                    className="fixed bottom-24 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-2xl shadow-emerald-500/20"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
+                      <span className="text-base">View Cart — {formatCurrency(total)}</span>
+                      <span>›</span>
+                    </div>
+                  </button>
+                </>
               ) : null}
 
               {posScreen === "cart" ? (
@@ -1125,6 +930,7 @@ export function AppShell() {
                         <div key={`${item.category}-${item.code}`} className={`flex items-center justify-between gap-3 rounded-2xl border p-4 ${item.qty > 1 ? "border-emerald-400/70 bg-emerald-400/10" : "border-white/10 bg-white/5"}`}>
                           <div>
                             <div className="text-lg font-semibold text-white">{item.label}</div>
+
                             <div className="text-sm text-slate-400">{formatCurrency(item.amount)}</div>
                           </div>
                           <div className="flex items-center gap-3">
@@ -1140,7 +946,9 @@ export function AppShell() {
                   <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
                     <div className="flex items-center justify-between text-sm text-slate-300"><span>Subtotal</span><span>{formatCurrency(total)}</span></div>
                     <div className="flex items-center justify-between text-2xl font-semibold text-white"><span>Total</span><span className="text-emerald-300">{formatCurrency(total)}</span></div>
+
                     <div className="grid grid-cols-2 gap-3">
+
                       <button
                         type="button"
                         onClick={() => saveFromQuantities(false)}
@@ -1161,8 +969,7 @@ export function AppShell() {
                   </div>
                 </div>
               ) : null}
-            </section>
-          </>
+          </section>
         )}
 
       </div>
@@ -1170,6 +977,7 @@ export function AppShell() {
   }
 
   function getSelectedItemsSummary() {
+
     const items: Array<{ category: (typeof RECEIPT_KEYS)[number]; code: string; label: string; qty: number; amount: number }> = [];
     const codePrefix = { andar: "AN", bahar: "BH", result: "RT" } as const;
     for (const category of RECEIPT_KEYS) {
@@ -1220,13 +1028,8 @@ export function AppShell() {
       await refreshReceipts();
 
       if (autoDownload) {
-        try {
-          await receiptPrintController.printReceipt(data.receipt);
-          setMessage(`Receipt ${data.receipt.receiptNumber} created and printed`);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          setMessage(`Receipt saved, but print failed: ${message}`);
-        }
+        await exportReceiptImage(data.receipt, "share");
+        setMessage(`Receipt ${data.receipt.receiptNumber} created and shared`);
       } else {
         setReceiptModalReceipt(data.receipt);
         setMessage(`Receipt ${data.receipt.receiptNumber} created`);
@@ -1566,6 +1369,35 @@ export function AppShell() {
   async function runSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await refreshReceipts(search);
+  }
+
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: loginForm.username, password: loginForm.password }),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as { user?: SessionUser; error?: string };
+    if (!response.ok || !data.user) {
+      setMessage(data.error ?? "Unable to sign in");
+      return;
+    }
+
+    setSession(data.user);
+    setLoginForm({ username: "", password: "" });
+    window.location.reload();
+  }
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setSession(null);
+    setCurrentPage("dashboard");
+    setMenuOpen(false);
+    setMessage(null);
   }
 
   if (loading) {
@@ -2110,117 +1942,6 @@ export function AppShell() {
         </GlassCard>
       )}
 
-      {currentPage === "printer-settings" && (
-        <GlassCard className="max-w-5xl mx-auto" title="Printer Settings" subtitle="Select a paired Bluetooth thermal printer and paper width.">
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
-              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-                <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Status</div>
-                <div className="mt-2 text-lg font-semibold text-white">
-                  {printerLoading ? "Loading printer status..." : `${getPrinterStateLabel()} • ${printerStatus?.message ?? "Printer not configured"}`}
-                </div>
-                <div className="mt-2 text-sm text-slate-400">
-                  {printerStatus?.savedPrinter
-                    ? `${printerStatus.savedPrinter.name} • ${printerStatus.savedPrinter.paperWidthMm}mm • ${printerStatus.savedPrinter.autoCut ? "Auto cut" : "No cut"}`
-                    : "No printer selected yet."}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setCurrentPage("printer-test")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Open Test Screen</button>
-                <button type="button" onClick={() => setCurrentPage("settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Back</button>
-              </div>
-            </div>
-
-            {printerMessage ? <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{printerMessage}</div> : null}
-
-            <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Paper</div>
-                    <div className="text-lg font-semibold text-white">58mm / 80mm</div>
-                  </div>
-                  <div className="grid grid-cols-2 rounded-[1rem] border border-white/10 bg-slate-950/80 p-1 text-sm font-semibold">
-                    <button type="button" onClick={() => void updatePrinterPaperWidth(58)} className={`rounded-[0.9rem] px-3 py-2 ${printerSettings?.paperWidthMm === 58 ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>58mm</button>
-                    <button type="button" onClick={() => void updatePrinterPaperWidth(80)} className={`rounded-[0.9rem] px-3 py-2 ${printerSettings?.paperWidthMm === 80 ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}>80mm</button>
-                  </div>
-                </div>
-                <p className="text-sm text-slate-400">The selected width controls ESC/POS alignment and column spacing.</p>
-              </div>
-
-              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-                <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Paired Printers</div>
-                <div className="mt-3 space-y-2">
-                  {printerDevices.length === 0 ? (
-                    <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-400">No paired Bluetooth printers found.</div>
-                  ) : (
-                    printerDevices.map((device) => (
-                      <button
-                        key={device.address}
-                        type="button"
-                        onClick={() => void savePrinterDevice(device)}
-                        className={`w-full rounded-2xl border px-4 py-3 text-left transition ${printerSettings?.address === device.address ? "border-emerald-400 bg-emerald-400/10 text-white" : "border-white/10 bg-slate-950/70 text-slate-200 hover:bg-white/5"}`}
-                      >
-                        <div className="font-semibold">{device.name}</div>
-                        <div className="text-xs text-slate-400">{device.address}</div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </GlassCard>
-      )}
-
-      {currentPage === "printer-test" && (
-        <GlassCard className="max-w-5xl mx-auto" title="Printer Test" subtitle="Check printer connection and saved settings before using a receipt.">
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
-              <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-                <div className="text-sm uppercase tracking-[0.3em] text-slate-500">Printer State</div>
-                <div className="mt-2 text-lg font-semibold text-white">{getPrinterStateLabel()}</div>
-                <div className="mt-2 text-sm text-slate-400">{getPrinterStateDetail()}</div>
-                <div className="mt-3 text-xs text-slate-500">Saved printer: {printerStatus?.savedPrinter ? `${printerStatus.savedPrinter.name} • ${printerStatus.savedPrinter.paperWidthMm}mm` : "None"}</div>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Printer Settings</button>
-                <button type="button" onClick={() => setCurrentPage("settings")} className="rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Back</button>
-              </div>
-            </div>
-
-            {printerMessage ? <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{printerMessage}</div> : null}
-
-            <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-              <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-                <div>
-                  <div className="text-sm font-semibold text-white">Sample Receipt</div>
-                  <div className="text-xs text-slate-400">A small receipt is used to check the connected printer.</div>
-                </div>
-                <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">Status</div>
-              </div>
-              <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-4 text-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-                <div className="mx-auto max-w-[280px] space-y-1 font-mono text-[18px] leading-[1.35] text-center">
-                  {buildReceiptLines({
-                    receiptNumber: "TEST-001",
-                    heading: heading,
-                    timestamp: new Date(),
-                    entries: [
-                      { itemKey: "andar", code: "1", qty: 1, rate: rates.andar, amount: rates.andar },
-                    ],
-                  }).lines.map((line, index) => (
-                    <div key={`${line}-${index}`}>{line}</div>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <button type="button" onClick={() => void downloadReceiptImage({ receiptNumber: "TEST-001", heading, timestamp: new Date().toISOString(), entries: [{ itemKey: "andar", code: "1", qty: 1, rate: rates.andar, amount: rates.andar }], totalAmount: rates.andar } as ReceiptRecord)} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white">Share / Save</button>
-              </div>
-            </div>
-          </div>
-        </GlassCard>
-      )}
-
       {currentPage === "dashboard" && renderMobileDashboard()}
 
       {currentPage === "settings" && (
@@ -2235,15 +1956,11 @@ export function AppShell() {
                 <button onClick={() => setCurrentPage("rates")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Change Rates</button>
                 <button onClick={() => setCurrentPage("sales")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Reports</button>
                 <button onClick={() => setCurrentPage("receipts")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">All Past Receipts</button>
-                <button onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Settings</button>
-                <button onClick={() => setCurrentPage("printer-test")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Test</button>
                 <button onClick={() => setCurrentPage("admins")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Counter Admins</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
               </>
             ) : (
               <>
-                <button onClick={() => setCurrentPage("printer-settings")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Settings</button>
-                <button onClick={() => setCurrentPage("printer-test")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Printer Test</button>
                 <button onClick={() => setCurrentPage("update-password")} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-left text-white">Update Password</button>
               </>
             )}
