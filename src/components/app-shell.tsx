@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 
@@ -57,11 +57,24 @@ type UserRecord = {
   createdAt: string;
 };
 
+type ReceiptExportMode = "share" | "open";
+
+type ReceiptOpenerBridge = {
+  openReceipt(options: {
+    imageBase64: string;
+    fileName: string;
+    mimeType?: string;
+    dialogTitle?: string;
+  }): Promise<{ opened: boolean }>;
+};
+
 const initialRates: RateMap = {
   andar: DEFAULT_RATES.andar,
   bahar: DEFAULT_RATES.bahar,
   result: DEFAULT_RATES.result,
 };
+
+const ReceiptOpener = registerPlugin<ReceiptOpenerBridge>("ReceiptOpener");
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -207,9 +220,21 @@ export function AppShell() {
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [salesChartFilter, setSalesChartFilter] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
+  const [receiptExportMode, setReceiptExportMode] = useState<ReceiptExportMode>("share");
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "password" | null>(null);
+
+  useEffect(() => {
+    const savedMode = window.localStorage.getItem("billinglottery.receiptExportMode");
+    if (savedMode === "share" || savedMode === "open") {
+      setReceiptExportMode(savedMode);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("billinglottery.receiptExportMode", receiptExportMode);
+  }, [receiptExportMode]);
 
   async function refreshSalesReport(date = salesDate) {
     const response = await fetch(`/api/sales?date=${encodeURIComponent(date)}`, { cache: "no-store" });
@@ -528,11 +553,12 @@ export function AppShell() {
     await refreshReceipts();
 
     try {
-      await exportReceiptImage(data.receipt, "share");
-      setMessage(`Receipt ${data.receipt.receiptNumber} created and shared`);
+      const exportMode = receiptExportMode === "open" && Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" ? "open" : "share";
+      await exportReceiptImage(data.receipt, exportMode);
+      setMessage(`Receipt ${data.receipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setMessage(`Receipt saved, but share failed: ${message}`);
+      setMessage(`Receipt saved, but export failed: ${message}`);
     }
   }
 
@@ -895,7 +921,7 @@ export function AppShell() {
               <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={addEntryRow} className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white">Add line</button>
                 <button type="button" onClick={submitReceipt} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200">Save</button>
-                <button type="button" onClick={saveAndShare} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">Save &amp; Share</button>
+                <button type="button" onClick={saveAndShare} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">{receiptExportMode === "open" ? "Save &amp; Open" : "Save &amp; Share"}</button>
               </div>
             </div>
           </section>
@@ -1073,8 +1099,9 @@ export function AppShell() {
       await refreshReceipts();
 
       if (autoDownload) {
-        await exportReceiptImage(data.receipt, "share");
-        setMessage(`Receipt ${data.receipt.receiptNumber} created and shared`);
+        const exportMode = receiptExportMode === "open" && Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" ? "open" : "share";
+        await exportReceiptImage(data.receipt, exportMode);
+        setMessage(`Receipt ${data.receipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
       } else {
         setReceiptModalReceipt(data.receipt);
         setMessage(`Receipt ${data.receipt.receiptNumber} created`);
@@ -1131,7 +1158,7 @@ export function AppShell() {
     return savedEntries;
   }
 
-  async function exportReceiptImage(receiptData?: ReceiptRecord, mode: "download" | "share" = "download") {
+  async function exportReceiptImage(receiptData?: ReceiptRecord, mode: "download" | "share" | "open" = "download") {
     let preview;
 
     if (receiptData) {
@@ -1258,6 +1285,16 @@ export function AppShell() {
           text: `Receipt ${receiptNum}`,
           url: fileUri.uri,
           dialogTitle: "Share receipt",
+        });
+        return;
+      }
+
+      if (mode === "open" && Capacitor.getPlatform() === "android") {
+        await ReceiptOpener.openReceipt({
+          imageBase64: base64Data,
+          fileName: `${receiptNum}.png`,
+          mimeType: "image/png",
+          dialogTitle: "Open receipt with",
         });
         return;
       }
@@ -2009,6 +2046,34 @@ export function AppShell() {
             <h2 className="text-2xl font-semibold text-white">Settings</h2>
             <p className="text-sm text-slate-400">Manage account, rates, and admin tools.</p>
           </div>
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Receipt action</h3>
+                <p className="text-sm text-slate-400">Choose what happens after Charge on Android.</p>
+              </div>
+              <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${receiptExportMode === "open" ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}>
+                {receiptExportMode === "open" ? "Open With" : "Share With"}
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setReceiptExportMode("share")}
+                className={`rounded-[1.2rem] border px-4 py-3 text-sm font-semibold transition ${receiptExportMode === "share" ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/10 bg-slate-950/70 text-white"}`}
+              >
+                Share With
+              </button>
+              <button
+                type="button"
+                onClick={() => setReceiptExportMode("open")}
+                className={`rounded-[1.2rem] border px-4 py-3 text-sm font-semibold transition ${receiptExportMode === "open" ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/10 bg-slate-950/70 text-white"}`}
+              >
+                Open With
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Open With saves the receipt and launches Android&apos;s app chooser after charge.</p>
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             {session.role === "MASTER_ADMIN" ? (
               <>
@@ -2055,7 +2120,7 @@ export function AppShell() {
               >
                 Download
               </button>
-              <button type="button" onClick={() => void exportReceiptImage(receiptModalReceipt, "share")} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">Share</button>
+              <button type="button" onClick={() => void exportReceiptImage(receiptModalReceipt, receiptExportMode === "open" ? "open" : "share")} className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950">{receiptExportMode === "open" ? "Open With" : "Share"}</button>
             </div>
           </div>
         </div>

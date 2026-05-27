@@ -4,6 +4,7 @@ import android.os.Bundle;
 
 import com.billinglottery.app.bluetooth.BluetoothPrinterPlugin;
 import com.billinglottery.app.print.ReceiptPrintPlugin;
+import com.billinglottery.app.share.ReceiptOpenPlugin;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
 
@@ -12,6 +13,7 @@ public class MainActivity extends BridgeActivity {
 	protected void onCreate(Bundle savedInstanceState) {
 		initialPlugins.add(BluetoothPrinterPlugin.class);
 		initialPlugins.add(ReceiptPrintPlugin.class);
+		initialPlugins.add(ReceiptOpenPlugin.class);
 		super.onCreate(savedInstanceState);
 	}
 }
