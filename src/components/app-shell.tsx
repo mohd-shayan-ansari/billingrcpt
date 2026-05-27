@@ -388,6 +388,11 @@ export function AppShell() {
 
   useEffect(() => {
     let active = true;
+    const hasPending = (lastReceipt?.syncStatus === "pending") || (readPendingReceiptDrafts().length > 0);
+    if (hasPending) {
+      return;
+    }
+
     void (async () => {
       try {
         const resp = await fetch(`/api/receipts/next?heading=${encodeURIComponent(heading)}`, { cache: "no-store" });
