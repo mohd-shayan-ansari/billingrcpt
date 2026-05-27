@@ -206,6 +206,7 @@ export function AppShell() {
   const [salesHistoryScope, setSalesHistoryScope] = useState<"day" | "all">("day");
   const [salesReceiptSearch, setSalesReceiptSearch] = useState("");
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
+  const [salesChartFilter, setSalesChartFilter] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "password" | null>(null);
@@ -683,19 +684,60 @@ export function AppShell() {
   }
 
   function getFilteredSalesHistoryItems() {
-    return getFilteredSalesHistory().flatMap((receipt) => {
+    const aggregated = new Map<string, {
+      id: string;
+      slotId: string;
+      slotLabel: string;
+      itemKey: (typeof RECEIPT_KEYS)[number];
+      itemName: string;
+      code: string;
+      qty: number;
+      shortLabel: string;
+    }>();
+
+    for (const receipt of getFilteredSalesHistory()) {
+      const slotId = getTimeSlotIdForTimestamp(receipt.timestamp);
       const slotLabel = getSalesHistorySlotLabel(receipt.timestamp);
-      return toReceiptEntries(receipt).map((entry) => ({
-        id: `${receipt.id}-${entry.itemKey}-${entry.code}`,
-        receiptNumber: receipt.receiptNumber,
-        timestamp: receipt.timestamp,
-        slotLabel,
-        itemKey: entry.itemKey,
-        itemName: ITEM_LABELS[entry.itemKey],
-        code: entry.code,
-        qty: entry.qty,
-        shortLabel: `${entry.itemKey === "andar" ? "AN" : entry.itemKey === "bahar" ? "BH" : "RT"}-${entry.code}`,
-      }));
+
+      for (const entry of toReceiptEntries(receipt)) {
+        if (salesChartFilter !== "all" && entry.itemKey !== salesChartFilter) {
+          continue;
+        }
+
+        const key = `${slotId ?? "no-slot"}-${entry.itemKey}-${entry.code}`;
+        const existing = aggregated.get(key);
+
+        if (existing) {
+          existing.qty += entry.qty;
+          continue;
+        }
+
+        aggregated.set(key, {
+          id: key,
+          slotId: slotId ?? "no-slot",
+          slotLabel,
+          itemKey: entry.itemKey,
+          itemName: ITEM_LABELS[entry.itemKey],
+          code: entry.code,
+          qty: entry.qty,
+          shortLabel: `${entry.itemKey === "andar" ? "AN" : entry.itemKey === "bahar" ? "BH" : "RT"}-${entry.code}`,
+        });
+      }
+    }
+
+    return [...aggregated.values()].sort((left, right) => {
+      const leftSlot = left.slotId === "no-slot" ? Number.MAX_SAFE_INTEGER : Number(left.slotId.replace(/\D/g, "") || 0);
+      const rightSlot = right.slotId === "no-slot" ? Number.MAX_SAFE_INTEGER : Number(right.slotId.replace(/\D/g, "") || 0);
+
+      if (leftSlot !== rightSlot) {
+        return leftSlot - rightSlot;
+      }
+
+      if (left.itemKey !== right.itemKey) {
+        return left.itemKey.localeCompare(right.itemKey);
+      }
+
+      return left.code.localeCompare(right.code, undefined, { numeric: true });
     });
   }
 
@@ -1828,6 +1870,24 @@ export function AppShell() {
                 ))}
               </div>
 
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "andar", label: "AN" },
+                  { key: "bahar", label: "BH" },
+                  { key: "result", label: "RT" },
+                ].map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setSalesChartFilter(filter.key as "all" | (typeof RECEIPT_KEYS)[number])}
+                    className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${salesChartFilter === filter.key ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-white/15 bg-white/5 text-slate-300"}`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="space-y-4">
                 <div className="overflow-x-auto pb-2">
                   <div className="flex min-w-max gap-3">
@@ -1841,23 +1901,19 @@ export function AppShell() {
                               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">{formatSlotLabel(slot)}</div>
                               <div className="text-sm text-slate-400">Auto filtered slot chart</div>
                             </div>
-                            <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{items.length} items</div>
+                            <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{items.reduce((sum, item) => sum + item.qty, 0)} total</div>
                           </div>
-                          <div className="mt-3 grid grid-cols-[1.1fr_0.9fr_0.45fr_0.95fr] gap-2 border-b border-white/10 pb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                          <div className="mt-3 grid grid-cols-[1fr_0.35fr] gap-2 border-b border-white/10 pb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">
                             <div>Item</div>
-                            <div>Time</div>
                             <div>Qty</div>
-                            <div>Rcpt No</div>
                           </div>
                           <div className="mt-2 space-y-2">
                             {items.map((item) => (
-                              <div key={item.id} className="grid grid-cols-[1.1fr_0.9fr_0.45fr_0.95fr] gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm">
+                              <div key={item.id} className="grid grid-cols-[1fr_0.35fr] gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm">
                                 <div className="min-w-0">
                                   <div className="truncate font-semibold text-white">{item.shortLabel}</div>
                                 </div>
-                                <div className="text-slate-300">{formatDate(item.timestamp)}</div>
                                 <div className="font-semibold text-emerald-300">{item.qty}</div>
-                                <div className="font-semibold text-white">{item.receiptNumber}</div>
                               </div>
                             ))}
                           </div>
@@ -1868,7 +1924,7 @@ export function AppShell() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                  Scroll sideways to view each time slot. Each card lists the sold item, receipt number, quantity, and time.
+                  Scroll sideways to view each time slot. Each card now groups repeated items together and shows the total quantity only.
                 </div>
               </div>
             </div>
