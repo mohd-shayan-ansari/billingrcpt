@@ -618,7 +618,8 @@ export function AppShell() {
         syncStatus: "pending",
       }));
 
-    return [...pendingReceipts, ...serverReceipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+    const markedServerReceipts = serverReceipts.map((receipt) => ({ ...receipt, syncStatus: "synced" as const }));
+    return [...pendingReceipts, ...markedServerReceipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
   }
 
   async function refreshReceipts(nextSearch = search) {
@@ -656,12 +657,13 @@ export function AppShell() {
 
       const remaining = readPendingReceiptDrafts().filter((entry) => entry.clientReceiptId !== draft.clientReceiptId);
       writePendingReceiptDrafts(remaining);
+      const syncedReceipt = { ...data.receipt as ReceiptRecord, syncStatus: "synced" as const };
       setReceipts((current) => {
         const filtered = current.filter((entry) => entry.clientReceiptId !== draft.clientReceiptId);
-        return [data.receipt as ReceiptRecord, ...filtered].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+        return [syncedReceipt, ...filtered].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
       });
       if (lastReceipt?.clientReceiptId === draft.clientReceiptId) {
-        setLastReceipt(data.receipt);
+        setLastReceipt(syncedReceipt);
       }
       if (remaining.length > 0) {
         nextDraftToSync = remaining[0];
@@ -684,6 +686,9 @@ export function AppShell() {
 
     const clientReceiptId = crypto.randomUUID();
     const receiptNumber = nextReceiptNumber !== "PENDING" ? nextReceiptNumber : createFallbackReceiptNumber();
+    if (nextReceiptNumber !== "PENDING") {
+      setNextReceiptNumber(incrementReceiptNumber(receiptNumber));
+    }
     const pendingDraft: PendingReceiptDraft = {
       clientReceiptId,
       receiptNumber,
@@ -708,7 +713,7 @@ export function AppShell() {
     setLastReceipt(localReceipt);
     setReceipts((current) => mergeReceiptsWithPending([localReceipt, ...current.filter((entry) => entry.clientReceiptId !== clientReceiptId)]));
     setEntries([newEntry("andar")]);
-    setMessage(`Receipt ${receiptNumber} saved locally`);
+    setMessage(`Receipt ${receiptNumber} saved locally — syncing to database...`);
 
     void syncPendingReceipt(pendingDraft);
     return { pendingDraft, localReceipt };
@@ -1318,14 +1323,43 @@ export function AppShell() {
     for (const item of itemTypes) {
       if (!item.codeField || item.qty <= 0) continue;
 
-      const code = String(item.codeField).split(",").map((c) => c.trim()).filter(Boolean).join(",");
-      if (code) {
+      const codes = String(item.codeField).split(",").map((c) => c.trim()).filter(Boolean);
+      if (!codes.length) {
+        continue;
+      }
+
+      if (codes.length === 1) {
         savedEntries.push({
           itemKey: item.key,
-          code,
+          code: codes[0],
           qty: Number(item.qty),
           rate: Number(item.rate),
           amount: Number(item.amount),
+        });
+        continue;
+      }
+
+      const totalQty = Number(item.qty);
+      const baseQty = Math.floor(totalQty / codes.length);
+      let remainder = totalQty % codes.length;
+
+      for (const code of codes) {
+        const qty = baseQty + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) {
+          remainder -= 1;
+        }
+
+        if (qty <= 0) {
+          continue;
+        }
+
+        const rate = Number(item.rate);
+        savedEntries.push({
+          itemKey: item.key,
+          code,
+          qty,
+          rate,
+          amount: rate * qty,
         });
       }
     }
@@ -2027,9 +2061,22 @@ export function AppShell() {
                         || receipt.admin?.name?.toLowerCase().includes(term)
                         || toReceiptEntries(receipt).some((entry) => ITEM_LABELS[entry.itemKey].toLowerCase().includes(term) || entry.code.toLowerCase().includes(term));
                     }).map((receipt) => (
-                      <div key={receipt.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/70 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                      <div key={receipt.id} className={`grid gap-3 rounded-2xl border p-4 md:grid-cols-[1fr_auto] md:items-center ${receipt.syncStatus === "pending" ? "border-amber-400/30 bg-amber-400/5" : "border-white/10 bg-slate-950/70"}`}>
                         <div>
-                          <div className="font-semibold text-white">Receipt {receipt.receiptNumber}</div>
+                          <div className="flex items-center gap-2 font-semibold text-white">
+                            Receipt {receipt.receiptNumber}
+                            {receipt.syncStatus === "pending" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-300">
+                                <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400"></span></span>
+                                Syncing
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-300">
+                                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                Synced
+                              </span>
+                            )}
+                          </div>
                           <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.heading ?? heading}</div>
                           <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">{toReceiptEntries(receipt).map((entry) => `${ITEM_LABELS[entry.itemKey]} No. ${entry.code} Qty ${entry.qty}`).join(" • ")}</div>
                         </div>
@@ -2226,9 +2273,22 @@ export function AppShell() {
                   || receipt.admin?.name?.toLowerCase().includes(term)
                   || toReceiptEntries(receipt).some((entry) => ITEM_LABELS[entry.itemKey].toLowerCase().includes(term) || entry.code.toLowerCase().includes(term));
               }).map((receipt) => (
-                <div key={receipt.id} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                <div key={receipt.id} className={`grid gap-3 rounded-2xl border p-4 md:grid-cols-[1fr_auto] md:items-center ${receipt.syncStatus === "pending" ? "border-amber-400/30 bg-amber-400/5" : "border-white/10 bg-white/5"}`}>
                   <div>
-                    <div className="font-semibold text-white">Receipt {receipt.receiptNumber}</div>
+                    <div className="flex items-center gap-2 font-semibold text-white">
+                      Receipt {receipt.receiptNumber}
+                      {receipt.syncStatus === "pending" ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-300">
+                          <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400"></span></span>
+                          Syncing
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-300">
+                          <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                          Synced
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-slate-400">{formatDate(receipt.timestamp)} • {receipt.admin?.name ?? "Admin"}</div>
                     <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">{toReceiptEntries(receipt).map((entry) => `${ITEM_LABELS[entry.itemKey]} No. ${entry.code} Qty ${entry.qty}`).join(" • ")}</div>
                   </div>
@@ -2314,7 +2374,20 @@ export function AppShell() {
             <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950 p-4 shadow-2xl shadow-black/50">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-semibold text-white">Receipt <span className="font-bold">{receiptModalReceipt.receiptNumber}</span></h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-semibold text-white">Receipt <span className="font-bold">{receiptModalReceipt.receiptNumber}</span></h3>
+                    {receiptModalReceipt.syncStatus === "pending" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-300">
+                        <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400"></span></span>
+                        Syncing
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-300">
+                        <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                        Synced
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-slate-400">Preview, save, or share.</p>
                 </div>
                 <button type="button" onClick={() => setReceiptModalReceipt(null)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>

@@ -306,10 +306,10 @@ export async function POST(request: Request) {
     ) VALUES (
       ${crypto.randomUUID()},
       ${receiptNumber},
-      ${parsed.data.clientReceiptId ?? null},
       ${parsed.data.heading?.trim() || null},
       ${session.id},
       CURRENT_TIMESTAMP,
+      ${parsed.data.clientReceiptId ?? null},
       ${JSON.stringify(normalizedEntries)}::jsonb,
       ${andarCode || null},
       ${andarActive ? andarRate : null},
