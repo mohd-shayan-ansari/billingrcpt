@@ -632,9 +632,9 @@ export function AppShell() {
     setReceipts(mergeReceiptsWithPending(data.receipts));
   }
 
-  async function syncPendingReceipt(draft: PendingReceiptDraft) {
+  async function syncPendingReceipt(draft: PendingReceiptDraft): Promise<ReceiptRecord | null> {
     if (pendingReceiptSyncInFlight.current) {
-      return;
+      return null;
     }
 
     pendingReceiptSyncInFlight.current = true;
@@ -652,7 +652,7 @@ export function AppShell() {
 
       const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
       if (!response.ok || !data.receipt) {
-        return;
+        return null;
       }
 
       const remaining = readPendingReceiptDrafts().filter((entry) => entry.clientReceiptId !== draft.clientReceiptId);
@@ -662,13 +662,26 @@ export function AppShell() {
         const filtered = current.filter((entry) => entry.clientReceiptId !== draft.clientReceiptId);
         return [syncedReceipt, ...filtered].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
       });
-      if (lastReceipt?.clientReceiptId === draft.clientReceiptId) {
-        setLastReceipt(syncedReceipt);
-      }
+      setLastReceipt((current) => {
+        if (current?.clientReceiptId === draft.clientReceiptId) {
+          return syncedReceipt;
+        }
+        return current;
+      });
+      setReceiptModalReceipt((current) => {
+        if (current?.clientReceiptId === draft.clientReceiptId) {
+          return syncedReceipt;
+        }
+        return current;
+      });
       if (remaining.length > 0) {
         nextDraftToSync = remaining[0];
       }
+      setMessage(`Receipt ${syncedReceipt.receiptNumber} synced with database`);
       await refreshReceipts();
+      return syncedReceipt;
+    } catch {
+      return null;
     } finally {
       pendingReceiptSyncInFlight.current = false;
       if (nextDraftToSync) {
@@ -715,8 +728,8 @@ export function AppShell() {
     setEntries([newEntry("andar")]);
     setMessage(`Receipt ${receiptNumber} saved locally — syncing to database...`);
 
-    void syncPendingReceipt(pendingDraft);
-    return { pendingDraft, localReceipt };
+    const syncPromise = syncPendingReceipt(pendingDraft);
+    return { pendingDraft, localReceipt, syncPromise };
   }
 
   async function refreshUsers() {
@@ -763,8 +776,18 @@ export function AppShell() {
 
     try {
       const exportMode = receiptExportMode === "open" && Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" ? "open" : "share";
-      await exportReceiptImage(queued.localReceipt, exportMode);
-      setMessage(`Receipt ${queued.localReceipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
+      
+      let receiptToExport = queued.localReceipt;
+      const synced = await Promise.race([
+        queued.syncPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+      ]);
+      if (synced) {
+        receiptToExport = synced;
+      }
+
+      await exportReceiptImage(receiptToExport, exportMode);
+      setMessage(`Receipt ${receiptToExport.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setMessage(`Receipt saved locally, but export failed: ${message}`);
@@ -1297,8 +1320,18 @@ export function AppShell() {
 
       if (autoDownload) {
         const exportMode = receiptExportMode === "open" && Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" ? "open" : "share";
-        await exportReceiptImage(queued.localReceipt, exportMode);
-        setMessage(`Receipt ${queued.localReceipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
+        
+        let receiptToExport = queued.localReceipt;
+        const synced = await Promise.race([
+          queued.syncPromise,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+        ]);
+        if (synced) {
+          receiptToExport = synced;
+        }
+
+        await exportReceiptImage(receiptToExport, exportMode);
+        setMessage(`Receipt ${receiptToExport.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
       } else {
         setReceiptModalReceipt(queued.localReceipt);
         setMessage(`Receipt ${queued.localReceipt.receiptNumber} saved locally`);
