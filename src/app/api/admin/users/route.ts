@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const users = await prisma.user.findMany({
     where: { role: Role.COUNTER_ADMIN },
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, username: true, role: true, createdAt: true },
+    select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
   });
 
   return NextResponse.json({ users });
@@ -54,8 +54,9 @@ export async function POST(request: Request) {
       username,
       passwordHash: await hashPassword(parsed.data.password),
       role: Role.COUNTER_ADMIN,
+      isActive: true,
     },
-    select: { id: true, name: true, username: true, role: true, createdAt: true },
+    select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
   });
 
   return NextResponse.json({ user }, { status: 201 });

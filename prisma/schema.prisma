@@ -18,6 +18,7 @@ model User {
   username     String    @unique
   passwordHash String
   role         Role
+  isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   receipts     Receipt[]
@@ -34,10 +35,12 @@ model Rate {
 model Receipt {
   id            String   @id @default(cuid())
   receiptNumber String   @unique
+  clientReceiptId String? @unique
   heading       String?
   adminId       String
   admin         User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
   timestamp     DateTime @default(now())
+  entries       Json?
   andarCode     String?
   andarRate     Int?
   andarQty      Int      @default(0)

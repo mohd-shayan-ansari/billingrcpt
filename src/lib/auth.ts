@@ -57,7 +57,7 @@ export async function getSessionFromRequest(request?: Request) {
     const { payload } = await jwtVerify(token, getJwtSecret());
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
 
-    if (!user) {
+    if (!user || !user.isActive) {
       return null;
     }
 

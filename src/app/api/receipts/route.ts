@@ -5,13 +5,101 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeCode } from "@/lib/receipt";
 
+type ReceiptEntryPayload = {
+  itemKey: "andar" | "bahar" | "result";
+  code: string;
+  qty: number;
+  rate: number;
+  amount: number;
+};
+
+type ReceiptRow = Record<string, unknown>;
+
+function mapReceiptRow(receipt: ReceiptRow) {
+  return {
+    id: String(receipt.id),
+    receiptNumber: String(receipt.receiptNumber),
+    localDate: (() => {
+      try {
+        const d = new Date(String(receipt.timestamp));
+        return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      } catch {
+        return receipt.local_date ? String(receipt.local_date) : null;
+      }
+    })(),
+    heading: receipt.heading === null ? null : String(receipt.heading),
+    timestamp: String(receipt.timestamp),
+    clientReceiptId: receipt.clientReceiptId === null ? null : String(receipt.clientReceiptId),
+    entries: Array.isArray(receipt.entries) ? (receipt.entries as ReceiptEntryPayload[]) : undefined,
+    admin: {
+      id: String(receipt.admin_id),
+      name: String(receipt.admin_name),
+      username: String(receipt.admin_username),
+      role: String(receipt.admin_role) as Role,
+    },
+    andarCode: receipt.andarCode === null ? null : String(receipt.andarCode),
+    andarRate: receipt.andarRate === null ? null : Number(receipt.andarRate),
+    andarQty: Number(receipt.andarQty ?? 0),
+    andarAmount: Number(receipt.andarAmount ?? 0),
+    baharCode: receipt.baharCode === null ? null : String(receipt.baharCode),
+    baharRate: receipt.baharRate === null ? null : Number(receipt.baharRate),
+    baharQty: Number(receipt.baharQty ?? 0),
+    baharAmount: Number(receipt.baharAmount ?? 0),
+    resultCode: receipt.resultCode === null ? null : String(receipt.resultCode),
+    resultRate: receipt.resultRate === null ? null : Number(receipt.resultRate),
+    resultQty: Number(receipt.resultQty ?? 0),
+    resultAmount: Number(receipt.resultAmount ?? 0),
+    totalAmount: Number(receipt.totalAmount ?? 0),
+  };
+}
+
+async function fetchReceiptByNumber(receiptNumber: string) {
+  const [receipt] = await prisma.$queryRaw<Array<ReceiptRow>>(Prisma.sql`
+    SELECT
+      r.id,
+      r."receiptNumber",
+      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
+      r.heading,
+      r.timestamp,
+      r."clientReceiptId",
+      r.entries,
+      r."adminId",
+      a.id AS admin_id,
+      a.name AS admin_name,
+      a.username AS admin_username,
+      a.role AS admin_role,
+      r."andarCode",
+      r."andarRate",
+      r."andarQty",
+      r."andarAmount",
+      r."baharCode",
+      r."baharRate",
+      r."baharQty",
+      r."baharAmount",
+      r."resultCode",
+      r."resultRate",
+      r."resultQty",
+      r."resultAmount",
+      r."totalAmount"
+    FROM "Receipt" r
+    JOIN "User" a ON a.id = r."adminId"
+    WHERE r."receiptNumber" = ${receiptNumber}
+    LIMIT 1
+  `);
+
+  return receipt ? mapReceiptRow(receipt) : null;
+}
+
 const createReceiptSchema = z.object({
+  clientReceiptId: z.string().uuid().optional(),
   heading: z.string().optional(),
   entries: z.array(
     z.object({
       itemKey: z.enum(["andar", "bahar", "result"]),
       code: z.string().optional(),
       qty: z.number().int().positive().default(1),
+      rate: z.number().int().nonnegative().optional(),
+      amount: z.number().int().nonnegative().optional(),
     }),
   ).min(1),
 });
@@ -64,6 +152,8 @@ export async function GET(request: Request) {
       TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
       r.heading,
       r.timestamp,
+      r."clientReceiptId",
+      r.entries,
       r."adminId",
       a.id AS admin_id,
       a.name AS admin_name,
@@ -89,41 +179,7 @@ export async function GET(request: Request) {
     LIMIT 100
   `);
 
-  const normalizedReceipts = receipts.map((receipt) => ({
-    id: String(receipt.id),
-    receiptNumber: String(receipt.receiptNumber),
-    // Compute authoritative local date in Asia/Kolkata from the timestamp to avoid
-    // DB type mismatches (timestamp vs timestamptz) causing off-by-one-day issues.
-    localDate: (() => {
-      try {
-        const d = new Date(String(receipt.timestamp));
-        return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      } catch (e) {
-        return receipt.local_date ? String(receipt.local_date) : null;
-      }
-    })(),
-    heading: receipt.heading === null ? null : String(receipt.heading),
-    timestamp: String(receipt.timestamp),
-    admin: {
-      id: String(receipt.admin_id),
-      name: String(receipt.admin_name),
-      username: String(receipt.admin_username),
-      role: String(receipt.admin_role) as Role,
-    },
-    andarCode: receipt.andarCode === null ? null : String(receipt.andarCode),
-    andarRate: receipt.andarRate === null ? null : Number(receipt.andarRate),
-    andarQty: Number(receipt.andarQty ?? 0),
-    andarAmount: Number(receipt.andarAmount ?? 0),
-    baharCode: receipt.baharCode === null ? null : String(receipt.baharCode),
-    baharRate: receipt.baharRate === null ? null : Number(receipt.baharRate),
-    baharQty: Number(receipt.baharQty ?? 0),
-    baharAmount: Number(receipt.baharAmount ?? 0),
-    resultCode: receipt.resultCode === null ? null : String(receipt.resultCode),
-    resultRate: receipt.resultRate === null ? null : Number(receipt.resultRate),
-    resultQty: Number(receipt.resultQty ?? 0),
-    resultAmount: Number(receipt.resultAmount ?? 0),
-    totalAmount: Number(receipt.totalAmount ?? 0),
-  }));
+  const normalizedReceipts = receipts.map(mapReceiptRow);
 
   return NextResponse.json({ receipts: normalizedReceipts });
 }
@@ -142,6 +198,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid receipt payload" }, { status: 400 });
   }
 
+  if (parsed.data.clientReceiptId) {
+    const existing = await prisma.receipt.findUnique({ where: { clientReceiptId: parsed.data.clientReceiptId } });
+    if (existing) {
+      const receipt = await fetchReceiptByNumber(existing.receiptNumber);
+      if (receipt) {
+        return NextResponse.json({ receipt });
+      }
+    }
+  }
+
   const rates = await prisma.rate.findMany();
   const rateMap = Object.fromEntries(rates.map((rate) => [rate.itemKey, rate.rate])) as Record<string, number>;
 
@@ -156,13 +222,14 @@ export async function POST(request: Request) {
         return null;
       }
 
-      const rate = entry.itemKey === "andar" ? andarRate : entry.itemKey === "bahar" ? baharRate : resultRate;
+      const rate = typeof entry.rate === "number" ? entry.rate : entry.itemKey === "andar" ? andarRate : entry.itemKey === "bahar" ? baharRate : resultRate;
+      const amount = typeof entry.amount === "number" ? entry.amount : rate * entry.qty;
       return {
         itemKey: entry.itemKey,
         code,
         qty: entry.qty,
         rate,
-        amount: rate * entry.qty,
+        amount,
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -219,6 +286,8 @@ export async function POST(request: Request) {
       heading,
       "adminId",
       timestamp,
+      "clientReceiptId",
+      entries,
       "andarCode",
       "andarRate",
       "andarQty",
@@ -237,9 +306,11 @@ export async function POST(request: Request) {
     ) VALUES (
       ${crypto.randomUUID()},
       ${receiptNumber},
+      ${parsed.data.clientReceiptId ?? null},
       ${parsed.data.heading?.trim() || null},
       ${session.id},
       CURRENT_TIMESTAMP,
+      ${JSON.stringify(normalizedEntries)}::jsonb,
       ${andarCode || null},
       ${andarActive ? andarRate : null},
       ${andarQty},
@@ -258,72 +329,14 @@ export async function POST(request: Request) {
     )
   `);
 
-  const [receipt] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
-    SELECT
-      r.id,
-      r."receiptNumber",
-      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
-      r.heading,
-      r.timestamp,
-      r."adminId",
-      a.id AS admin_id,
-      a.name AS admin_name,
-      a.username AS admin_username,
-      a.role AS admin_role,
-      r."andarCode",
-      r."andarRate",
-      r."andarQty",
-      r."andarAmount",
-      r."baharCode",
-      r."baharRate",
-      r."baharQty",
-      r."baharAmount",
-      r."resultCode",
-      r."resultRate",
-      r."resultQty",
-      r."resultAmount",
-      r."totalAmount"
-    FROM "Receipt" r
-    JOIN "User" a ON a.id = r."adminId"
-    WHERE r."receiptNumber" = ${receiptNumber}
-    LIMIT 1
-  `);
+  const receipt = await fetchReceiptByNumber(receiptNumber);
+
+  if (!receipt) {
+    return NextResponse.json({ error: "Unable to save receipt" }, { status: 500 });
+  }
 
   return NextResponse.json({
-    receipt: {
-      id: String(receipt.id),
-      receiptNumber: String(receipt.receiptNumber),
-      localDate: (() => {
-        try {
-          const d = new Date(String(receipt.timestamp));
-          return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-        } catch (e) {
-          return receipt.local_date ? String(receipt.local_date) : null;
-        }
-      })(),
-      heading: receipt.heading === null ? null : String(receipt.heading),
-      timestamp: String(receipt.timestamp),
-      admin: {
-        id: String(receipt.admin_id),
-        name: String(receipt.admin_name),
-        username: String(receipt.admin_username),
-        role: String(receipt.admin_role) as Role,
-      },
-      andarCode: receipt.andarCode === null ? null : String(receipt.andarCode),
-      andarRate: receipt.andarRate === null ? null : Number(receipt.andarRate),
-      andarQty: Number(receipt.andarQty ?? 0),
-      andarAmount: Number(receipt.andarAmount ?? 0),
-      baharCode: receipt.baharCode === null ? null : String(receipt.baharCode),
-      baharRate: receipt.baharRate === null ? null : Number(receipt.baharRate),
-      baharQty: Number(receipt.baharQty ?? 0),
-      baharAmount: Number(receipt.baharAmount ?? 0),
-      resultCode: receipt.resultCode === null ? null : String(receipt.resultCode),
-      resultRate: receipt.resultRate === null ? null : Number(receipt.resultRate),
-      resultQty: Number(receipt.resultQty ?? 0),
-      resultAmount: Number(receipt.resultAmount ?? 0),
-      totalAmount: Number(receipt.totalAmount ?? 0),
-      entries: normalizedEntries,
-    },
+    receipt,
   }, { status: 201 });
 }
 

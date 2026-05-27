@@ -28,6 +28,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
+  if (!user.isActive) {
+    return NextResponse.json({ error: "Account is disabled" }, { status: 403 });
+  }
+
   const ok = await verifyPassword(parsed.data.password, user.passwordHash);
 
   if (!ok) {

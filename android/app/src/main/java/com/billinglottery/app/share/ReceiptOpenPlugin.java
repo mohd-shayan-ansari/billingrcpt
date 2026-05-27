@@ -1,5 +1,6 @@
 package com.billinglottery.app.share;
 
+import android.content.ClipData;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -27,6 +28,7 @@ import java.io.FileOutputStream;
 public class ReceiptOpenPlugin extends Plugin {
 
     private static final String PREFS_NAME = "billinglottery.receipt_opener";
+    private static final String PREF_COMPONENT = "preferred_component";
     private static final String PREF_PACKAGE = "preferred_package";
     private static final String PREF_CLASS = "preferred_class";
 
@@ -139,6 +141,7 @@ public class ReceiptOpenPlugin extends Plugin {
     private Intent createViewIntent(Uri receiptUri, String mimeType) {
         Intent viewIntent = new Intent(Intent.ACTION_VIEW);
         viewIntent.setDataAndType(receiptUri, mimeType);
+        viewIntent.setClipData(ClipData.newUri(getContext().getContentResolver(), "receipt", receiptUri));
         viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return viewIntent;
@@ -159,16 +162,30 @@ public class ReceiptOpenPlugin extends Plugin {
 
     private boolean openWithPreferredApp(Intent baseIntent, Uri receiptUri) {
         SharedPreferences preferences = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String packageName = preferences.getString(PREF_PACKAGE, "");
-        String className = preferences.getString(PREF_CLASS, "");
+        String flattenedComponent = preferences.getString(PREF_COMPONENT, "");
 
-        if (packageName == null || packageName.isEmpty() || className == null || className.isEmpty()) {
+        if (flattenedComponent == null || flattenedComponent.isEmpty()) {
+            String packageName = preferences.getString(PREF_PACKAGE, "");
+            String className = preferences.getString(PREF_CLASS, "");
+
+            if (packageName != null && !packageName.isEmpty() && className != null && !className.isEmpty()) {
+                flattenedComponent = new ComponentName(packageName, className).flattenToString();
+            }
+        }
+
+        if (flattenedComponent == null || flattenedComponent.isEmpty()) {
+            return false;
+        }
+
+        ComponentName preferredComponent = ComponentName.unflattenFromString(flattenedComponent);
+        if (preferredComponent == null) {
+            clearPreferredComponent();
             return false;
         }
 
         Intent preferredIntent = new Intent(baseIntent);
-        preferredIntent.setComponent(new ComponentName(packageName, className));
-        getContext().grantUriPermission(packageName, receiptUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        preferredIntent.setComponent(preferredComponent);
+        getContext().grantUriPermission(preferredComponent.getPackageName(), receiptUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
         try {
             getActivity().startActivity(preferredIntent);
@@ -183,17 +200,19 @@ public class ReceiptOpenPlugin extends Plugin {
         SharedPreferences preferences = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         preferences
             .edit()
-            .putString(PREF_PACKAGE, componentName.getPackageName())
-            .putString(PREF_CLASS, componentName.getClassName())
-            .apply();
+            .putString(PREF_COMPONENT, componentName.flattenToString())
+            .remove(PREF_PACKAGE)
+            .remove(PREF_CLASS)
+            .commit();
     }
 
     private void clearPreferredComponent() {
         SharedPreferences preferences = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         preferences
             .edit()
+            .remove(PREF_COMPONENT)
             .remove(PREF_PACKAGE)
             .remove(PREF_CLASS)
-            .apply();
+            .commit();
     }
 }

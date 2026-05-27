@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRef } from "react";
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
@@ -23,6 +24,7 @@ type RateMap = Record<(typeof RECEIPT_KEYS)[number], number>;
 type ReceiptRecord = {
   id: string;
   receiptNumber: string;
+  clientReceiptId?: string | null;
   heading: string | null;
   timestamp: string;
   admin: SessionUser;
@@ -40,7 +42,67 @@ type ReceiptRecord = {
   resultAmount: number;
   totalAmount: number;
   entries?: Array<{ itemKey: (typeof RECEIPT_KEYS)[number]; code: string; qty: number; rate: number; amount: number }>;
+  syncStatus?: "pending" | "synced";
 };
+
+type ReceiptLineSnapshot = {
+  itemKey: (typeof RECEIPT_KEYS)[number];
+  code: string;
+  qty: number;
+  rate: number;
+  amount: number;
+};
+
+type PendingReceiptDraft = {
+  clientReceiptId: string;
+  receiptNumber: string;
+  heading: string;
+  timestamp: string;
+  entries: ReceiptLineSnapshot[];
+  admin: SessionUser;
+};
+
+const PENDING_RECEIPTS_STORAGE_KEY = "billinglottery.pendingReceipts";
+
+function readPendingReceiptDrafts() {
+  if (typeof window === "undefined") {
+    return [] as PendingReceiptDraft[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PENDING_RECEIPTS_STORAGE_KEY);
+    if (!raw) {
+      return [] as PendingReceiptDraft[];
+    }
+
+    const parsed = JSON.parse(raw) as PendingReceiptDraft[];
+    return Array.isArray(parsed) ? parsed.filter((entry) => Boolean(entry?.clientReceiptId && entry?.receiptNumber)) : [];
+  } catch {
+    return [] as PendingReceiptDraft[];
+  }
+}
+
+function writePendingReceiptDrafts(drafts: PendingReceiptDraft[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(PENDING_RECEIPTS_STORAGE_KEY, JSON.stringify(drafts));
+}
+
+function incrementReceiptNumber(receiptNumber: string) {
+  const match = receiptNumber.match(/^([A-Z]+)(\d+)$/);
+  if (!match) {
+    return receiptNumber;
+  }
+
+  const [, prefix, numericPart] = match;
+  return `${prefix}${String(Number(numericPart) + 1).padStart(numericPart.length, "0")}`;
+}
+
+function createFallbackReceiptNumber() {
+  return `TMP-${Date.now().toString(36).toUpperCase()}`;
+}
 
 type ReceiptEntryDraft = {
   id: string;
@@ -54,6 +116,7 @@ type UserRecord = {
   name: string;
   username: string;
   role: string;
+  isActive: boolean;
   createdAt: string;
 };
 
@@ -223,7 +286,8 @@ export function AppShell() {
   const [receiptExportMode, setReceiptExportMode] = useState<ReceiptExportMode>("share");
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | null>(null);
-  const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "password" | null>(null);
+  const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "status" | "password" | null>(null);
+  const pendingReceiptSyncInFlight = useRef(false);
 
   useEffect(() => {
     const savedMode = window.localStorage.getItem("billinglottery.receiptExportMode");
@@ -235,6 +299,17 @@ export function AppShell() {
   useEffect(() => {
     window.localStorage.setItem("billinglottery.receiptExportMode", receiptExportMode);
   }, [receiptExportMode]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const drafts = readPendingReceiptDrafts();
+    if (drafts.length > 0) {
+      void syncPendingReceipt(drafts[0]);
+    }
+  }, [session]);
 
   async function refreshSalesReport(date = salesDate) {
     const response = await fetch(`/api/sales?date=${encodeURIComponent(date)}`, { cache: "no-store" });
@@ -257,7 +332,7 @@ export function AppShell() {
     setWinnerRecords(data.winners || []);
   }
 
-  const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
+  const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN" && user.isActive);
 
   async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -415,7 +490,7 @@ export function AppShell() {
 
         if (receiptsResponse.ok) {
           const receiptsData = (await receiptsResponse.json()) as { receipts: ReceiptRecord[] };
-          setReceipts(receiptsData.receipts);
+          setReceipts(mergeReceiptsWithPending(receiptsData.receipts));
         }
 
         // Master admin uses server-side totals; counter admin uses their own receipts.
@@ -465,6 +540,87 @@ export function AppShell() {
     setRateDraft(nextRates);
   }
 
+  function buildReceiptLineSnapshots(draftEntries: ReceiptEntryDraft[]) {
+    return draftEntries
+      .map((entry) => {
+        const rate = rates[entry.itemKey];
+        const amount = rate * entry.qty;
+        return {
+          itemKey: entry.itemKey,
+          code: entry.code,
+          qty: entry.qty,
+          rate,
+          amount,
+        };
+      })
+      .filter((entry) => entry.code && entry.qty > 0);
+  }
+
+  function buildReceiptFromSnapshots(params: {
+    clientReceiptId: string;
+    receiptNumber: string;
+    timestamp: string;
+    heading: string;
+    entries: ReceiptLineSnapshot[];
+    syncStatus: "pending" | "synced";
+  }): ReceiptRecord {
+    const { clientReceiptId, receiptNumber, timestamp, heading: receiptHeading, entries: receiptEntries, syncStatus } = params;
+    const grouped = {
+      andar: { code: [] as string[], qty: 0, amount: 0, rate: null as number | null },
+      bahar: { code: [] as string[], qty: 0, amount: 0, rate: null as number | null },
+      result: { code: [] as string[], qty: 0, amount: 0, rate: null as number | null },
+    };
+
+    for (const entry of receiptEntries) {
+      const group = grouped[entry.itemKey];
+      group.code.push(entry.code);
+      group.qty += entry.qty;
+      group.amount += entry.amount;
+      group.rate = entry.rate;
+    }
+
+    return {
+      id: clientReceiptId,
+      receiptNumber,
+      clientReceiptId,
+      heading: receiptHeading || null,
+      timestamp,
+      admin: session as SessionUser,
+      andarCode: grouped.andar.code.length ? grouped.andar.code.join(",") : null,
+      andarRate: grouped.andar.rate,
+      andarQty: grouped.andar.qty,
+      andarAmount: grouped.andar.amount,
+      baharCode: grouped.bahar.code.length ? grouped.bahar.code.join(",") : null,
+      baharRate: grouped.bahar.rate,
+      baharQty: grouped.bahar.qty,
+      baharAmount: grouped.bahar.amount,
+      resultCode: grouped.result.code.length ? grouped.result.code.join(",") : null,
+      resultRate: grouped.result.rate,
+      resultQty: grouped.result.qty,
+      resultAmount: grouped.result.amount,
+      totalAmount: grouped.andar.amount + grouped.bahar.amount + grouped.result.amount,
+      entries: receiptEntries,
+      syncStatus,
+    };
+  }
+
+  function mergeReceiptsWithPending(serverReceipts: ReceiptRecord[]) {
+    const pendingDrafts = readPendingReceiptDrafts();
+    const serverReceiptIds = new Set(serverReceipts.map((receipt) => receipt.clientReceiptId || receipt.id));
+    const pendingReceipts = pendingDrafts
+      .filter((draft) => !serverReceiptIds.has(draft.clientReceiptId))
+      .map((draft) => buildReceiptFromSnapshots({
+        clientReceiptId: draft.clientReceiptId,
+        receiptNumber: draft.receiptNumber,
+        timestamp: draft.timestamp,
+        heading: draft.heading,
+        entries: draft.entries,
+        syncStatus: "pending",
+      }));
+
+    return [...pendingReceipts, ...serverReceipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+  }
+
   async function refreshReceipts(nextSearch = search) {
     const response = await fetch(`/api/receipts?search=${encodeURIComponent(nextSearch)}`, { cache: "no-store" });
     if (!response.ok) {
@@ -472,7 +628,90 @@ export function AppShell() {
     }
 
     const data = (await response.json()) as { receipts: ReceiptRecord[] };
-    setReceipts(data.receipts);
+    setReceipts(mergeReceiptsWithPending(data.receipts));
+  }
+
+  async function syncPendingReceipt(draft: PendingReceiptDraft) {
+    if (pendingReceiptSyncInFlight.current) {
+      return;
+    }
+
+    pendingReceiptSyncInFlight.current = true;
+    let nextDraftToSync: PendingReceiptDraft | null = null;
+    try {
+      const response = await fetch("/api/receipts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientReceiptId: draft.clientReceiptId,
+          heading: draft.heading,
+          entries: draft.entries,
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
+      if (!response.ok || !data.receipt) {
+        return;
+      }
+
+      const remaining = readPendingReceiptDrafts().filter((entry) => entry.clientReceiptId !== draft.clientReceiptId);
+      writePendingReceiptDrafts(remaining);
+      setReceipts((current) => {
+        const filtered = current.filter((entry) => entry.clientReceiptId !== draft.clientReceiptId);
+        return [data.receipt as ReceiptRecord, ...filtered].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+      });
+      if (lastReceipt?.clientReceiptId === draft.clientReceiptId) {
+        setLastReceipt(data.receipt);
+      }
+      if (remaining.length > 0) {
+        nextDraftToSync = remaining[0];
+      }
+      await refreshReceipts();
+    } finally {
+      pendingReceiptSyncInFlight.current = false;
+      if (nextDraftToSync) {
+        void syncPendingReceipt(nextDraftToSync);
+      }
+    }
+  }
+
+  function queueLocalReceiptAndSync(params: { headingValue: string; draftEntries: ReceiptEntryDraft[]; autoDownload: boolean }) {
+    const snapshotEntries = buildReceiptLineSnapshots(params.draftEntries);
+    if (snapshotEntries.length === 0) {
+      setMessage("Please select at least one code with quantity");
+      return null;
+    }
+
+    const clientReceiptId = crypto.randomUUID();
+    const receiptNumber = nextReceiptNumber !== "PENDING" ? nextReceiptNumber : createFallbackReceiptNumber();
+    const pendingDraft: PendingReceiptDraft = {
+      clientReceiptId,
+      receiptNumber,
+      heading: params.headingValue,
+      timestamp: new Date().toISOString(),
+      entries: snapshotEntries,
+      admin: session as SessionUser,
+    };
+
+    const existingDrafts = readPendingReceiptDrafts();
+    writePendingReceiptDrafts([...existingDrafts, pendingDraft]);
+
+    const localReceipt = buildReceiptFromSnapshots({
+      clientReceiptId,
+      receiptNumber,
+      timestamp: pendingDraft.timestamp,
+      heading: pendingDraft.heading,
+      entries: pendingDraft.entries,
+      syncStatus: "pending",
+    });
+
+    setLastReceipt(localReceipt);
+    setReceipts((current) => mergeReceiptsWithPending([localReceipt, ...current.filter((entry) => entry.clientReceiptId !== clientReceiptId)]));
+    setEntries([newEntry("andar")]);
+    setMessage(`Receipt ${receiptNumber} saved locally`);
+
+    void syncPendingReceipt(pendingDraft);
+    return { pendingDraft, localReceipt };
   }
 
   async function refreshUsers() {
@@ -507,58 +746,23 @@ export function AppShell() {
 
   async function submitReceipt() {
     setMessage(null);
-
-    const response = await fetch("/api/receipts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        heading,
-        entries: entries.map((entry) => ({ itemKey: entry.itemKey, code: entry.code, qty: entry.qty })),
-      }),
-    });
-
-    const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
-    if (!response.ok || !data.receipt) {
-      setMessage(data.error ?? "Unable to create receipt");
-      return;
-    }
-
-    setLastReceipt(data.receipt);
-    setEntries([newEntry("andar")]);
-    setMessage(`Receipt ${data.receipt.receiptNumber} created`);
-    await refreshReceipts();
+    queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: false });
   }
 
   async function saveAndShare() {
     setMessage(null);
-
-    const response = await fetch("/api/receipts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        heading,
-        entries: entries.map((entry) => ({ itemKey: entry.itemKey, code: entry.code, qty: entry.qty })),
-      }),
-    });
-
-    const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
-    if (!response.ok || !data.receipt) {
-      setMessage(data.error ?? "Unable to create receipt");
+    const queued = queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: true });
+    if (!queued) {
       return;
     }
 
-    setLastReceipt(data.receipt);
-    setEntries([newEntry("andar")]);
-    setMessage(`Receipt ${data.receipt.receiptNumber} created`);
-    await refreshReceipts();
-
     try {
       const exportMode = receiptExportMode === "open" && Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" ? "open" : "share";
-      await exportReceiptImage(data.receipt, exportMode);
-      setMessage(`Receipt ${data.receipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
+      await exportReceiptImage(queued.localReceipt, exportMode);
+      setMessage(`Receipt ${queued.localReceipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setMessage(`Receipt saved, but export failed: ${message}`);
+      setMessage(`Receipt saved locally, but export failed: ${message}`);
     }
   }
 
@@ -1079,32 +1283,20 @@ export function AppShell() {
         return;
       }
 
-      const response = await fetch("/api/receipts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          heading,
-          entries: draftEntries.map((entry) => ({ itemKey: entry.itemKey, code: entry.code, qty: entry.qty })),
-        }),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
-      if (!response.ok || !data.receipt) {
-        setMessage(data.error ?? "Unable to create receipt");
+      const queued = queueLocalReceiptAndSync({ headingValue: heading, draftEntries, autoDownload });
+      if (!queued) {
         return;
       }
 
-      setLastReceipt(data.receipt);
       setCodeQuantities({ andar: {}, bahar: {}, result: {} });
-      await refreshReceipts();
 
       if (autoDownload) {
         const exportMode = receiptExportMode === "open" && Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" ? "open" : "share";
-        await exportReceiptImage(data.receipt, exportMode);
-        setMessage(`Receipt ${data.receipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
+        await exportReceiptImage(queued.localReceipt, exportMode);
+        setMessage(`Receipt ${queued.localReceipt.receiptNumber} created and ${exportMode === "open" ? "opened" : "shared"}`);
       } else {
-        setReceiptModalReceipt(data.receipt);
-        setMessage(`Receipt ${data.receipt.receiptNumber} created`);
+        setReceiptModalReceipt(queued.localReceipt);
+        setMessage(`Receipt ${queued.localReceipt.receiptNumber} saved locally`);
       }
     } finally {
       setReceiptActionLoading(null);
@@ -1396,6 +1588,34 @@ export function AppShell() {
     }
   }
 
+  async function toggleUserStatus(id: string, isActive: boolean) {
+    if (session?.id === id) {
+      setMessage("You cannot change your own status");
+      return;
+    }
+
+    setAdminActionLoading("status");
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: "Network error" }));
+        setMessage(data.error ?? "Unable to update user status");
+        return;
+      }
+
+      setMessage(isActive ? "Counter admin enabled" : "Counter admin disabled");
+      await refreshUsers();
+    } finally {
+      setAdminActionLoading(null);
+    }
+  }
+
   async function updatePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAdminActionLoading("password");
@@ -1572,8 +1792,14 @@ export function AppShell() {
                     <div>
                       <div className="font-semibold text-white">{user.name}</div>
                       <div className="text-sm text-slate-400">{user.username}</div>
+                      <div className="mt-1 inline-flex rounded-full border border-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+                        {user.isActive ? "Enabled" : "Disabled"}
+                      </div>
                     </div>
-                    <button onClick={() => deleteUser(user.id)} disabled={adminActionLoading === "delete" || session?.id === user.id} className="rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:opacity-60">{session?.id === user.id ? "Self" : adminActionLoading === "delete" ? "Removing..." : "Remove"}</button>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      <button onClick={() => toggleUserStatus(user.id, !user.isActive)} disabled={adminActionLoading === "status" || session?.id === user.id} className="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-400/20 disabled:opacity-60">{session?.id === user.id ? "Self" : adminActionLoading === "status" ? (user.isActive ? "Disabling..." : "Enabling...") : user.isActive ? "Disable" : "Enable"}</button>
+                      <button onClick={() => deleteUser(user.id)} disabled={adminActionLoading === "delete" || session?.id === user.id} className="rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:opacity-60">{session?.id === user.id ? "Self" : adminActionLoading === "delete" ? "Removing..." : "Remove"}</button>
+                    </div>
                   </div>
                 ))
               )}
