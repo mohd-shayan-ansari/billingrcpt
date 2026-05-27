@@ -1126,32 +1126,15 @@ export function AppShell() {
     for (const item of itemTypes) {
       if (!item.codeField || item.qty <= 0) continue;
 
-      const codes = String(item.codeField).split(",").map((c) => c.trim()).filter(Boolean);
-      if (codes.length <= 1) {
-        const code = codes[0] || "";
-        if (code) {
-          savedEntries.push({
-            itemKey: item.key,
-            code,
-            qty: Number(item.qty),
-            rate: Number(item.rate),
-            amount: Number(item.amount),
-          });
-        }
-      } else {
-        const perCodeQty = Math.floor(Number(item.qty) / codes.length);
-        const remainder = Number(item.qty) % codes.length;
-
-        for (let i = 0; i < codes.length; i++) {
-          const qty = perCodeQty + (i < remainder ? 1 : 0);
-          savedEntries.push({
-            itemKey: item.key,
-            code: codes[i],
-            qty,
-            rate: Number(item.rate),
-            amount: Number(item.rate) * qty,
-          });
-        }
+      const code = String(item.codeField).split(",").map((c) => c.trim()).filter(Boolean).join(",");
+      if (code) {
+        savedEntries.push({
+          itemKey: item.key,
+          code,
+          qty: Number(item.qty),
+          rate: Number(item.rate),
+          amount: Number(item.amount),
+        });
       }
     }
 
@@ -1213,23 +1196,30 @@ export function AppShell() {
 
     const scale = 1.5;
     const fontSize = 12;
+    const itemFontSize = 15;
     const lineHeight = 17;
+    const itemLineHeight = 21;
     const padding = 16;
     const fontFamily = '"Courier New", Courier, monospace';
-    const font = `bold ${fontSize}px ${fontFamily}`;
+    const defaultFont = `bold ${fontSize}px ${fontFamily}`;
+    const itemFont = `bold ${itemFontSize}px ${fontFamily}`;
+    const isReceiptItemLine = (line: string) => /\b(?:AN|BH|RT)-\d/.test(line);
 
-    ctx.font = font;
+    ctx.font = defaultFont;
 
     let maxWidth = 0;
+    let logicalHeight = padding * 2;
     for (const line of preview.lines) {
+      const isItemLine = isReceiptItemLine(line);
+      ctx.font = isItemLine ? itemFont : defaultFont;
       const metrics = ctx.measureText(line);
       if (metrics.width > maxWidth) {
         maxWidth = metrics.width;
       }
+      logicalHeight += isItemLine ? itemLineHeight : lineHeight;
     }
 
     const logicalWidth = Math.max(240, Math.ceil(maxWidth + padding * 2));
-    const logicalHeight = preview.lines.length * lineHeight + padding * 2;
 
     canvas.width = Math.ceil(logicalWidth * scale);
     canvas.height = Math.ceil(logicalHeight * scale);
@@ -1240,12 +1230,13 @@ export function AppShell() {
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = "white";
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
-    ctx.font = font;
     ctx.fillStyle = "black";
     ctx.textBaseline = "top";
 
     let y = padding;
     for (const line of preview.lines) {
+      const isItemLine = isReceiptItemLine(line);
+      ctx.font = isItemLine ? itemFont : defaultFont;
       ctx.fillText(line, padding, y);
       if (line.includes("Time:")) {
         const textWidth = ctx.measureText(line.trimEnd()).width;
@@ -1261,7 +1252,7 @@ export function AppShell() {
         ctx.stroke();
       }
 
-      y += lineHeight;
+      y += isItemLine ? itemLineHeight : lineHeight;
     }
 
     const dataUrl = canvas.toDataURL("image/png");

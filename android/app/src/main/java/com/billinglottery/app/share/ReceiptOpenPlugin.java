@@ -1,8 +1,15 @@
 package com.billinglottery.app.share;
 
+import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.util.Base64;
 
 import androidx.core.content.FileProvider;
@@ -18,6 +25,58 @@ import java.io.FileOutputStream;
 
 @CapacitorPlugin(name = "ReceiptOpener")
 public class ReceiptOpenPlugin extends Plugin {
+
+    private static final String PREFS_NAME = "billinglottery.receipt_opener";
+    private static final String PREF_PACKAGE = "preferred_package";
+    private static final String PREF_CLASS = "preferred_class";
+
+    private BroadcastReceiver chosenAppReceiver;
+    private String chooserAction;
+
+    @Override
+    public void load() {
+        chooserAction = getContext().getPackageName() + ".RECEIPT_CHOOSER_SELECTED";
+        chosenAppReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null) {
+                    return;
+                }
+
+                ComponentName chosenComponent;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    chosenComponent = intent.getParcelableExtra(Intent.EXTRA_CHOSEN_COMPONENT, ComponentName.class);
+                } else {
+                    chosenComponent = intent.getParcelableExtra(Intent.EXTRA_CHOSEN_COMPONENT);
+                }
+
+                if (chosenComponent == null) {
+                    return;
+                }
+
+                savePreferredComponent(chosenComponent);
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(chooserAction);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getContext().registerReceiver(chosenAppReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            getContext().registerReceiver(chosenAppReceiver, filter);
+        }
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (chosenAppReceiver != null) {
+            try {
+                getContext().unregisterReceiver(chosenAppReceiver);
+            } catch (Exception ignored) {
+                // Receiver may already be unregistered.
+            }
+        }
+        super.handleOnDestroy();
+    }
 
     @PluginMethod
     public void openReceipt(PluginCall call) {
@@ -47,20 +106,24 @@ public class ReceiptOpenPlugin extends Plugin {
         }
 
         Uri receiptUri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", receiptFile);
-        Intent viewIntent = new Intent(Intent.ACTION_VIEW);
-        viewIntent.setDataAndType(receiptUri, mimeType);
-        viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-        Intent chooserIntent = Intent.createChooser(viewIntent, dialogTitle);
-        chooserIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Intent viewIntent = createViewIntent(receiptUri, mimeType);
 
         try {
             getActivity().runOnUiThread(() -> {
                 try {
+                    if (openWithPreferredApp(viewIntent, receiptUri)) {
+                        JSObject result = new JSObject();
+                        result.put("opened", true);
+                        result.put("usedDefault", true);
+                        call.resolve(result);
+                        return;
+                    }
+
+                    Intent chooserIntent = createChooserIntent(viewIntent, dialogTitle);
                     getActivity().startActivity(chooserIntent);
                     JSObject result = new JSObject();
                     result.put("opened", true);
+                    result.put("usedDefault", false);
                     call.resolve(result);
                 } catch (ActivityNotFoundException exception) {
                     call.reject("No app available to open this receipt");
@@ -71,5 +134,66 @@ public class ReceiptOpenPlugin extends Plugin {
         } catch (Exception exception) {
             call.reject(exception.getMessage());
         }
+    }
+
+    private Intent createViewIntent(Uri receiptUri, String mimeType) {
+        Intent viewIntent = new Intent(Intent.ACTION_VIEW);
+        viewIntent.setDataAndType(receiptUri, mimeType);
+        viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return viewIntent;
+    }
+
+    private Intent createChooserIntent(Intent viewIntent, String dialogTitle) {
+        Intent callbackIntent = new Intent(chooserAction).setPackage(getContext().getPackageName());
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent callback = PendingIntent.getBroadcast(getContext(), 0, callbackIntent, flags);
+
+        Intent chooserIntent = Intent.createChooser(viewIntent, dialogTitle, callback.getIntentSender());
+        chooserIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return chooserIntent;
+    }
+
+    private boolean openWithPreferredApp(Intent baseIntent, Uri receiptUri) {
+        SharedPreferences preferences = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String packageName = preferences.getString(PREF_PACKAGE, "");
+        String className = preferences.getString(PREF_CLASS, "");
+
+        if (packageName == null || packageName.isEmpty() || className == null || className.isEmpty()) {
+            return false;
+        }
+
+        Intent preferredIntent = new Intent(baseIntent);
+        preferredIntent.setComponent(new ComponentName(packageName, className));
+        getContext().grantUriPermission(packageName, receiptUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        try {
+            getActivity().startActivity(preferredIntent);
+            return true;
+        } catch (Exception exception) {
+            clearPreferredComponent();
+            return false;
+        }
+    }
+
+    private void savePreferredComponent(ComponentName componentName) {
+        SharedPreferences preferences = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        preferences
+            .edit()
+            .putString(PREF_PACKAGE, componentName.getPackageName())
+            .putString(PREF_CLASS, componentName.getClassName())
+            .apply();
+    }
+
+    private void clearPreferredComponent() {
+        SharedPreferences preferences = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        preferences
+            .edit()
+            .remove(PREF_PACKAGE)
+            .remove(PREF_CLASS)
+            .apply();
     }
 }

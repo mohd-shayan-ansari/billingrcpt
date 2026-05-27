@@ -54,30 +54,18 @@ function getPrintableEntries(receipt: ReceiptLike) {
       .map((entry) => entry.trim())
       .filter(Boolean);
 
-    if (codes.length <= 1) {
-      entries.push({
-        itemKey: item.key,
-        code: codes[0] ?? "",
-        qty: Number(item.qty),
-        rate: Number(item.rate),
-        amount: Number(item.amount),
-      });
+    const code = codes.join(",");
+    if (!code) {
       continue;
     }
 
-    const perCodeQty = Math.floor(Number(item.qty) / codes.length);
-    const remainder = Number(item.qty) % codes.length;
-
-    for (let index = 0; index < codes.length; index += 1) {
-      const qty = perCodeQty + (index < remainder ? 1 : 0);
-      entries.push({
-        itemKey: item.key,
-        code: codes[index],
-        qty,
-        rate: Number(item.rate),
-        amount: Number(item.rate) * qty,
-      });
-    }
+    entries.push({
+      itemKey: item.key,
+      code,
+      qty: Number(item.qty),
+      rate: Number(item.rate),
+      amount: Number(item.amount),
+    });
   }
 
   return entries;

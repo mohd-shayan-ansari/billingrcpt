@@ -26,33 +26,19 @@ function getReceiptEntries(receipt: ReceiptLike) {
       continue;
     }
 
-    const codes = String(item.code).split(",").map((entry) => entry.trim()).filter(Boolean);
-    if (codes.length <= 1) {
-      items.push({
-        itemKey: item.key,
-        itemName: ITEM_LABELS[item.key],
-        code: codes[0] ?? "",
-        qty: Number(item.qty),
-        rate: Number(item.rate),
-        amount: Number(item.amount),
-      });
+    const code = String(item.code).split(",").map((entry) => entry.trim()).filter(Boolean).join(",");
+    if (!code) {
       continue;
     }
 
-    const perCodeQty = Math.floor(Number(item.qty) / codes.length);
-    const remainder = Number(item.qty) % codes.length;
-
-    for (let index = 0; index < codes.length; index += 1) {
-      const qty = perCodeQty + (index < remainder ? 1 : 0);
-      items.push({
-        itemKey: item.key,
-        itemName: ITEM_LABELS[item.key],
-        code: codes[index],
-        qty,
-        rate: Number(item.rate),
-        amount: Number(item.rate) * qty,
-      });
-    }
+    items.push({
+      itemKey: item.key,
+      itemName: ITEM_LABELS[item.key],
+      code,
+      qty: Number(item.qty),
+      rate: Number(item.rate),
+      amount: Number(item.amount),
+    });
   }
 
   return items;

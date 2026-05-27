@@ -548,7 +548,7 @@ public class BluetoothPrinterPlugin extends Plugin {
             return "";
         }
 
-        return timestamp.length() >= 19 ? timestamp.substring(11, 19) : timestamp;
+        return timestamp.length() >= 16 ? timestamp.substring(11, 16) : timestamp;
     }
 
     private void writeQrCode(ByteArrayOutputStream output, String data) throws Exception {
