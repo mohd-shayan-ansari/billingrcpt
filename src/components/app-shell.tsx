@@ -955,7 +955,7 @@ export function AppShell() {
               ) : null}
 
               {posScreen === "cart" ? (
-                <div className="rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 shadow-2xl shadow-black/40">
+                <div className="rounded-[2rem] border border-white/10 bg-slate-950/98 p-5 pb-32 shadow-2xl shadow-black/40">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-2xl font-semibold text-white">Cart</h3>
@@ -988,26 +988,29 @@ export function AppShell() {
                   <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
                     <div className="flex items-center justify-between text-sm text-slate-300"><span>Subtotal</span><span>{formatCurrency(total)}</span></div>
                     <div className="flex items-center justify-between text-2xl font-semibold text-white"><span>Total</span><span className="text-emerald-300">{formatCurrency(total)}</span></div>
+                  </div>
+                </div>
+              ) : null}
 
-                    <div className="grid grid-cols-2 gap-3">
-
-                      <button
-                        type="button"
-                        onClick={() => saveFromQuantities(false)}
-                        disabled={receiptActionLoading !== null}
-                        className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                      >
-                        {receiptActionLoading === "save" ? "Saving..." : "Save Only"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => saveFromQuantities(true)}
-                        disabled={receiptActionLoading !== null}
-                        className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                      >
-                        {receiptActionLoading === "charge" ? "Charging..." : `Charge ${formatCurrency(total)}`}
-                      </button>
-                    </div>
+              {posScreen === "cart" ? (
+                <div className="fixed bottom-20 left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] border border-white/10 bg-slate-950/98 p-3 shadow-2xl shadow-black/50 backdrop-blur">
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => saveFromQuantities(false)}
+                      disabled={receiptActionLoading !== null}
+                      className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {receiptActionLoading === "save" ? "Saving..." : "Save Only"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveFromQuantities(true)}
+                      disabled={receiptActionLoading !== null}
+                      className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {receiptActionLoading === "charge" ? "Charging..." : `Charge ${formatCurrency(total)}`}
+                    </button>
                   </div>
                 </div>
               ) : null}
