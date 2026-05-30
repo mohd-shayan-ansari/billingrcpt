@@ -31,6 +31,7 @@ function mapReceiptRow(receipt: ReceiptRow) {
     timestamp: String(receipt.timestamp),
     clientReceiptId: receipt.clientReceiptId === null ? null : String(receipt.clientReceiptId),
     entries: Array.isArray(receipt.entries) ? (receipt.entries as ReceiptEntryPayload[]) : undefined,
+    syncStatus: "synced" as const,
     admin: {
       id: String(receipt.admin_id),
       name: String(receipt.admin_name),
@@ -338,6 +339,18 @@ export async function POST(request: Request) {
   return NextResponse.json({
     receipt,
   }, { status: 201 });
+}
+
+export async function DELETE(request: Request) {
+  const session = await getSessionFromRequest(request);
+
+  if (!session || session.role !== Role.MASTER_ADMIN) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  await prisma.receipt.deleteMany({});
+
+  return NextResponse.json({ ok: true });
 }
 
 function getCounterNumber(heading?: string) {
