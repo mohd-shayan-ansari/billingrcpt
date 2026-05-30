@@ -173,19 +173,22 @@ const CATEGORY_TABS = [
   { key: "result", label: "RT" },
 ] as const;
 
-const CATEGORY_TONES: Record<(typeof RECEIPT_KEYS)[number], { selected: string; badge: string; text: string }> = {
+const CATEGORY_TONES: Record<(typeof RECEIPT_KEYS)[number], { selected: string; unselected: string; badge: string; text: string }> = {
   andar: {
     selected: "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10",
+    unselected: "border-emerald-400/15 bg-emerald-400/5",
     badge: "border-emerald-400/10 bg-emerald-400/10 text-emerald-300",
     text: "text-emerald-300",
   },
   bahar: {
     selected: "border-blue-400 bg-blue-400/10 shadow-lg shadow-blue-400/10",
+    unselected: "border-blue-400/15 bg-blue-400/5",
     badge: "border-blue-400/10 bg-blue-400/10 text-blue-300",
     text: "text-blue-300",
   },
   result: {
     selected: "border-red-400 bg-red-400/10 shadow-lg shadow-red-400/10",
+    unselected: "border-red-400/15 bg-red-400/5",
     badge: "border-red-400/10 bg-red-400/10 text-red-300",
     text: "text-red-300",
   },
@@ -297,6 +300,7 @@ export function AppShell() {
   const [winnerMessage, setWinnerMessage] = useState<string | null>(null);
   const [codeSelectionOpen, setCodeSelectionOpen] = useState<"andar" | "bahar" | "result" | null>(null);
   const [codeQuantities, setCodeQuantities] = useState<Record<string, Record<string, number>>>({ andar: {}, bahar: {}, result: {} });
+  const [codeQuantityDrafts, setCodeQuantityDrafts] = useState<Record<string, Record<string, string>>>({ andar: {}, bahar: {}, result: {} });
   const [activeMode, setActiveMode] = useState<"service" | "simple">("service");
   const [activeCategory, setActiveCategory] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
   const [posScreen, setPosScreen] = useState<"catalog" | "cart" | "receipt">("catalog");
@@ -989,19 +993,50 @@ export function AppShell() {
       }
       return { ...prev, [category]: catMap };
     });
+
+    setCodeQuantityDrafts((prev) => {
+      const catDrafts = { ...prev[category] };
+      const currentValue = Number(prev[category]?.[code] || 0);
+      const nextValue = Math.max(0, currentValue + delta);
+      if (nextValue === 0) {
+        delete catDrafts[code];
+      } else {
+        catDrafts[code] = String(nextValue);
+      }
+      return { ...prev, [category]: catDrafts };
+    });
   }
 
-  function setCodeQty(category: string, code: string, value: number) {
+  function commitCodeQty(category: string, code: string, value: string | number) {
+    const parsedValue = typeof value === "number" ? value : Number(value);
+    const nextValue = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
+
     setCodeQuantities((prev) => {
       const catMap = { ...prev[category] };
-      const newVal = Math.max(0, value);
-      if (newVal === 0) {
+      if (nextValue === 0) {
         delete catMap[code];
       } else {
-        catMap[code] = newVal;
+        catMap[code] = nextValue;
       }
       return { ...prev, [category]: catMap };
     });
+
+    setCodeQuantityDrafts((prev) => {
+      const catDrafts = { ...prev[category] };
+      if (nextValue === 0) {
+        delete catDrafts[code];
+      } else {
+        catDrafts[code] = String(nextValue);
+      }
+      return { ...prev, [category]: catDrafts };
+    });
+  }
+
+  function updateCodeQtyDraft(category: string, code: string, value: string) {
+    setCodeQuantityDrafts((prev) => ({
+      ...prev,
+      [category]: { ...prev[category], [code]: value },
+    }));
   }
 
   function codeQuantitiesToEntries(): ReceiptEntryDraft[] {
@@ -1333,7 +1368,7 @@ export function AppShell() {
                               key={`${category}-${code}`}
                               type="button"
                               onClick={() => incrementCodeQuantity(category, code)}
-                              className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? CATEGORY_TONES[category].selected : "border-white/10 bg-white/5"}`}
+                              className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? CATEGORY_TONES[category].selected : CATEGORY_TONES[category].unselected}`}
                             >
                               <div className="flex h-full flex-col justify-between gap-2">
                                 <div className={`flex flex-1 items-center justify-center rounded-[1rem] border px-2 text-center ${isSelected ? CATEGORY_TONES[category].badge : "border-white/10 bg-white/5 text-white"}`}>
@@ -1380,21 +1415,23 @@ export function AppShell() {
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No items selected yet.</div>
                     ) : (
                       selectedItems.map((item) => (
-                        <div key={`${item.category}-${item.code}`} className={`flex items-center justify-between gap-3 rounded-2xl border p-4 ${item.qty > 1 ? "border-emerald-400/70 bg-emerald-400/10" : "border-white/10 bg-white/5"}`}>
-                          <div>
+                        <div key={`${item.category}-${item.code}`} className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${item.qty > 1 ? "border-emerald-400/70 bg-emerald-400/10" : "border-white/10 bg-white/5"}`}>
+                          <div className="min-w-0 flex-1">
                             <div className="text-lg font-semibold text-white">{item.label}</div>
 
                             <div className="text-sm text-slate-400">{formatCurrency(item.amount)}</div>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="grid grid-cols-[auto_minmax(4rem,1fr)_auto] items-center gap-2 sm:flex sm:items-center sm:gap-3">
                             <button type="button" onClick={() => adjustCodeQty(item.category, item.code, -1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl text-white">−</button>
                             <input
-                              type="number"
+                              type="text"
                               min="0"
-                              step="1"
-                              value={item.qty}
-                              onChange={(event) => setCodeQty(item.category, item.code, Number(event.target.value))}
-                              className="min-w-16 rounded-xl border border-white/10 bg-slate-950/80 px-2 py-2 text-center text-lg font-semibold text-white outline-none"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={codeQuantityDrafts[item.category]?.[item.code] ?? String(item.qty)}
+                              onChange={(event) => updateCodeQtyDraft(item.category, item.code, event.target.value.replace(/\D/g, ""))}
+                              onBlur={(event) => commitCodeQty(item.category, item.code, event.target.value)}
+                              className="min-w-0 w-full rounded-xl border border-white/10 bg-slate-950/80 px-2 py-2 text-center text-lg font-semibold text-white outline-none sm:w-20"
                             />
                             <button type="button" onClick={() => adjustCodeQty(item.category, item.code, 1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-xl font-semibold text-slate-950">+</button>
                           </div>
