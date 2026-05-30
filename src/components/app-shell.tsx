@@ -444,51 +444,6 @@ export function AppShell() {
   }, [heading, lastReceipt]);
 
   useEffect(() => {
-    let active = true;
-    if (currentPage === "sales" && session) {
-      const refreshSalesTab = async () => {
-        try {
-          setIsSalesLoading(true);
-          const winnersResponse = await fetch(`/api/winners?date=${encodeURIComponent(winnerDate)}`, { cache: "no-store" });
-
-          if (winnersResponse.ok) {
-            const data = await winnersResponse.json();
-            if (active) {
-              setWinnerRecords(data.winners || []);
-            }
-          }
-
-          if (session.role === "MASTER_ADMIN") {
-            const salesResponse = await fetch(`/api/sales?date=${encodeURIComponent(salesDate)}`, { cache: "no-store" });
-            if (salesResponse.ok) {
-              const data = await salesResponse.json();
-              if (active) {
-                setSalesData(data.salesData || []);
-                setGrandTotal(data.grandTotal || 0);
-              }
-            }
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          if (active) setIsSalesLoading(false);
-        }
-      };
-
-      void refreshSalesTab();
-      const timer = window.setInterval(() => {
-        void refreshSalesTab();
-      }, 2000);
-
-      return () => {
-        active = false;
-        window.clearInterval(timer);
-      };
-    }
-    return () => { active = false; };
-  }, [currentPage, salesDate, session, winnerDate]);
-
-  useEffect(() => {
     setWinnerDate(salesDate);
   }, [salesDate]);
 
@@ -587,6 +542,63 @@ export function AppShell() {
 
     setRates(nextRates);
     setRateDraft(nextRates);
+  }
+
+  async function refreshTodayStats() {
+    if (!session || session.role !== "MASTER_ADMIN") {
+      return;
+    }
+
+    try {
+      const today = getLocalDateString();
+      const statsResp = await fetch(`/api/stats/today?date=${encodeURIComponent(today)}`, { cache: "no-store" });
+      if (!statsResp.ok) {
+        return;
+      }
+
+      const stats = await statsResp.json();
+      setTodayRevenue(Number(stats.grossTotal ?? 0));
+      setTodayReceiptsCount(Number(stats.receiptCount ?? 0));
+    } catch {
+      // ignore background refresh failures
+    }
+  }
+
+  async function refreshSalesTab(showLoading = false) {
+    if (!session) {
+      return;
+    }
+
+    const shouldShowLoading = showLoading && salesData.length === 0 && winnerRecords.length === 0;
+    if (shouldShowLoading) {
+      setIsSalesLoading(true);
+    }
+
+    try {
+      const winnersResponse = await fetch(`/api/winners?date=${encodeURIComponent(winnerDate)}`, { cache: "no-store" });
+
+      if (winnersResponse.ok) {
+        const data = await winnersResponse.json();
+        setWinnerRecords(data.winners || []);
+      }
+
+      if (session.role === "MASTER_ADMIN") {
+        const salesResponse = await fetch(`/api/sales?date=${encodeURIComponent(salesDate)}`, { cache: "no-store" });
+        if (salesResponse.ok) {
+          const data = await salesResponse.json();
+          setSalesData(data.salesData || []);
+          setGrandTotal(data.grandTotal || 0);
+        }
+      }
+    } catch (error) {
+      if (showLoading) {
+        console.error(error);
+      }
+    } finally {
+      if (shouldShowLoading) {
+        setIsSalesLoading(false);
+      }
+    }
   }
 
   function buildReceiptLineSnapshots(draftEntries: ReceiptEntryDraft[]) {
@@ -836,6 +848,34 @@ export function AppShell() {
       setResetReceiptsLoading(false);
     }
   }
+
+  useEffect(() => {
+    let active = true;
+
+    if (!session) {
+      return () => { active = false; };
+    }
+
+    const refreshQuietly = async () => {
+      await Promise.all([
+        refreshReceipts(search),
+        refreshTodayStats(),
+        currentPage === "sales" ? refreshSalesTab(false) : Promise.resolve(),
+      ]);
+    };
+
+    void refreshQuietly();
+    const timer = window.setInterval(() => {
+      if (active) {
+        void refreshQuietly();
+      }
+    }, 2000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [currentPage, salesDate, search, session, winnerDate]);
 
   useEffect(() => {
     let active = true;
