@@ -175,22 +175,22 @@ const CATEGORY_TABS = [
 
 const CATEGORY_TONES: Record<(typeof RECEIPT_KEYS)[number], { selected: string; unselected: string; badge: string; text: string }> = {
   andar: {
-    selected: "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10",
-    unselected: "border-emerald-400/15 bg-emerald-400/5",
-    badge: "border-emerald-400/10 bg-emerald-400/10 text-emerald-300",
-    text: "text-emerald-300",
+    selected: "border-emerald-500 bg-emerald-500/14 shadow-lg shadow-emerald-500/12",
+    unselected: "border-emerald-500/18 bg-emerald-500/8",
+    badge: "border-emerald-500/12 bg-emerald-500/12 text-emerald-200",
+    text: "text-emerald-200",
   },
   bahar: {
-    selected: "border-blue-400 bg-blue-400/10 shadow-lg shadow-blue-400/10",
-    unselected: "border-blue-400/15 bg-blue-400/5",
-    badge: "border-blue-400/10 bg-blue-400/10 text-blue-300",
-    text: "text-blue-300",
+    selected: "border-blue-500 bg-blue-500/14 shadow-lg shadow-blue-500/12",
+    unselected: "border-blue-500/18 bg-blue-500/8",
+    badge: "border-blue-500/12 bg-blue-500/12 text-blue-200",
+    text: "text-blue-200",
   },
   result: {
-    selected: "border-red-400 bg-red-400/10 shadow-lg shadow-red-400/10",
-    unselected: "border-red-400/15 bg-red-400/5",
-    badge: "border-red-400/10 bg-red-400/10 text-red-300",
-    text: "text-red-300",
+    selected: "border-red-500 bg-red-500/14 shadow-lg shadow-red-500/12",
+    unselected: "border-red-500/18 bg-red-500/8",
+    badge: "border-red-500/12 bg-red-500/12 text-red-200",
+    text: "text-red-200",
   },
 };
 
