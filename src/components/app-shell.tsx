@@ -173,6 +173,24 @@ const CATEGORY_TABS = [
   { key: "result", label: "RT" },
 ] as const;
 
+const CATEGORY_TONES: Record<(typeof RECEIPT_KEYS)[number], { selected: string; badge: string; text: string }> = {
+  andar: {
+    selected: "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10",
+    badge: "border-emerald-400/10 bg-emerald-400/10 text-emerald-300",
+    text: "text-emerald-300",
+  },
+  bahar: {
+    selected: "border-blue-400 bg-blue-400/10 shadow-lg shadow-blue-400/10",
+    badge: "border-blue-400/10 bg-blue-400/10 text-blue-300",
+    text: "text-blue-300",
+  },
+  result: {
+    selected: "border-red-400 bg-red-400/10 shadow-lg shadow-red-400/10",
+    badge: "border-red-400/10 bg-red-400/10 text-red-300",
+    text: "text-red-300",
+  },
+};
+
 const POS_CODE_GRID: Record<(typeof RECEIPT_KEYS)[number], string[]> = {
   andar: Array.from({ length: 10 }, (_, index) => String(index)),
   bahar: Array.from({ length: 10 }, (_, index) => String(index)),
@@ -1315,14 +1333,14 @@ export function AppShell() {
                               key={`${category}-${code}`}
                               type="button"
                               onClick={() => incrementCodeQuantity(category, code)}
-                              className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/10" : "border-white/10 bg-white/5"}`}
+                              className={`relative aspect-[0.92] overflow-hidden rounded-[1.35rem] border p-3 text-left transition active:scale-[0.98] ${isSelected ? CATEGORY_TONES[category].selected : "border-white/10 bg-white/5"}`}
                             >
                               <div className="flex h-full flex-col justify-between gap-2">
-                                <div className="flex flex-1 items-center justify-center rounded-[1rem] border border-emerald-400/10 bg-emerald-400/10 px-2 text-center text-emerald-300">
+                                <div className={`flex flex-1 items-center justify-center rounded-[1rem] border px-2 text-center ${isSelected ? CATEGORY_TONES[category].badge : "border-white/10 bg-white/5 text-white"}`}>
                                   <span className="whitespace-nowrap text-[0.95rem] font-semibold leading-none">{(category === 'andar' ? 'AN' : category === 'bahar' ? 'BH' : 'RT')}-{code}</span>
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-sm font-semibold leading-none text-white">{formatCurrency(rates[category])}</div>
+                                  <div className={`text-sm font-semibold leading-none ${isSelected ? CATEGORY_TONES[category].text : "text-white"}`}>{formatCurrency(rates[category])}</div>
                                 </div>
                               </div>
                               {isSelected ? <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-400 px-1 text-xs font-bold text-slate-950">{qty}</span> : null}
@@ -1370,7 +1388,14 @@ export function AppShell() {
                           </div>
                           <div className="flex items-center gap-3">
                             <button type="button" onClick={() => adjustCodeQty(item.category, item.code, -1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl text-white">−</button>
-                            <div className="min-w-10 text-center text-lg font-semibold text-white">{item.qty}</div>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={item.qty}
+                              onChange={(event) => setCodeQty(item.category, item.code, Number(event.target.value))}
+                              className="min-w-16 rounded-xl border border-white/10 bg-slate-950/80 px-2 py-2 text-center text-lg font-semibold text-white outline-none"
+                            />
                             <button type="button" onClick={() => adjustCodeQty(item.category, item.code, 1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-xl font-semibold text-slate-950">+</button>
                           </div>
                         </div>
