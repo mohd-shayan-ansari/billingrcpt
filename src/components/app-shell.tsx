@@ -293,6 +293,7 @@ export function AppShell() {
   const [todayRevenue, setTodayRevenue] = useState(0);
   const [todayReceiptsCount, setTodayReceiptsCount] = useState(0);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
+  const [currentSalesSlotId, setCurrentSalesSlotId] = useState(() => getCurrentSalesSlotId());
   const [winnerDate, setWinnerDate] = useState(getLocalDateString());
   const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
   const [winnerRecords, setWinnerRecords] = useState<Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }>>([]);
@@ -352,6 +353,23 @@ export function AppShell() {
 
     return () => window.clearInterval(timer);
   }, [session]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const nextSlotId = getCurrentSalesSlotId();
+      setCurrentSalesSlotId((currentSlotId) => {
+        if (currentSlotId === nextSlotId) {
+          return currentSlotId;
+        }
+
+        setWinnerForm((current) => (current.slotId === currentSlotId ? { ...current, slotId: nextSlotId } : current));
+        setSalesSlotFilterId((currentFilterId) => (currentFilterId === currentSlotId ? nextSlotId : currentFilterId));
+        return nextSlotId;
+      });
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function prefetchNextReceiptNumber() {
     try {
@@ -1192,18 +1210,27 @@ export function AppShell() {
       slot: (typeof RESOLVED_SALES_SLOTS)[number];
       items: ReturnType<typeof getFilteredSalesHistoryItems>;
       revenue: number;
+      counterEarnings: Array<{ heading: string; total: number }>;
     }> = RESOLVED_SALES_SLOTS.map((slot) => ({
       slot,
       items: [] as ReturnType<typeof getFilteredSalesHistoryItems>,
       revenue: 0,
+      counterEarnings: [],
     }));
 
     const bucketByLabel = new Map(buckets.map((bucket) => [formatSlotLabel(bucket.slot), bucket]));
+    const counterTotalsByBucket = new Map<string, Map<string, number>>();
 
     for (const receipt of getFilteredSalesHistory()) {
-      const bucket = bucketByLabel.get(getSalesHistorySlotLabel(receipt.timestamp));
+      const slotLabel = getSalesHistorySlotLabel(receipt.timestamp);
+      const bucket = bucketByLabel.get(slotLabel);
       if (bucket) {
         bucket.revenue += receipt.totalAmount;
+
+        const counterHeading = receipt.heading ?? receipt.admin?.name ?? "Unknown counter";
+        const slotCounterTotals = counterTotalsByBucket.get(slotLabel) ?? new Map<string, number>();
+        slotCounterTotals.set(counterHeading, (slotCounterTotals.get(counterHeading) ?? 0) + receipt.totalAmount);
+        counterTotalsByBucket.set(slotLabel, slotCounterTotals);
       }
     }
 
@@ -1219,6 +1246,9 @@ export function AppShell() {
       .map((bucket) => ({
         ...bucket,
         items: [...bucket.items].sort((left, right) => right.qty - left.qty),
+        counterEarnings: [...(counterTotalsByBucket.get(formatSlotLabel(bucket.slot)) ?? new Map<string, number>())]
+          .map(([heading, total]) => ({ heading, total }))
+          .sort((left, right) => right.total - left.total),
       }));
   }
 
@@ -2462,7 +2492,7 @@ export function AppShell() {
                     {getSalesHistorySlotBuckets().length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No sold items match your filters.</div>
                     ) : (
-                      getSalesHistorySlotBuckets().map(({ slot, items, revenue }) => (
+                      getSalesHistorySlotBuckets().map(({ slot, items, revenue, counterEarnings }) => (
                         <section key={slot.id} className="w-[19rem] shrink-0 rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
                           <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
                             <div>
@@ -2474,6 +2504,23 @@ export function AppShell() {
                               <div className="text-xs font-semibold text-emerald-300">{formatCurrency(revenue)}</div>
                             </div>
                           </div>
+
+                          <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                            <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Counter earnings</div>
+                            <div className="mt-2 space-y-2">
+                              {counterEarnings.length === 0 ? (
+                                <div className="text-sm text-slate-400">No sales in this slot.</div>
+                              ) : (
+                                counterEarnings.map((entry) => (
+                                  <div key={`${slot.id}-${entry.heading}`} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                                    <div className="min-w-0 truncate font-medium text-white">{entry.heading}</div>
+                                    <div className="shrink-0 font-semibold text-emerald-300">{formatCurrency(entry.total)}</div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
                           <div className="mt-3 grid grid-cols-[1fr_0.35fr] gap-2 border-b border-white/10 pb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">
                             <div>Item</div>
                             <div>Qty</div>
