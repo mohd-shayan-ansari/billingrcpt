@@ -181,16 +181,16 @@ const CATEGORY_TONES: Record<(typeof RECEIPT_KEYS)[number], { selected: string; 
     text: "text-emerald-200",
   },
   bahar: {
-    selected: "border-blue-500 bg-blue-500/14 shadow-lg shadow-blue-500/12",
-    unselected: "border-blue-500/18 bg-blue-500/8",
-    badge: "border-blue-500/12 bg-blue-500/12 text-blue-200",
-    text: "text-blue-200",
-  },
-  result: {
     selected: "border-red-500 bg-red-500/14 shadow-lg shadow-red-500/12",
     unselected: "border-red-500/18 bg-red-500/8",
     badge: "border-red-500/12 bg-red-500/12 text-red-200",
     text: "text-red-200",
+  },
+  result: {
+    selected: "border-blue-500 bg-blue-500/14 shadow-lg shadow-blue-500/12",
+    unselected: "border-blue-500/18 bg-blue-500/8",
+    badge: "border-blue-500/12 bg-blue-500/12 text-blue-200",
+    text: "text-blue-200",
   },
 };
 
@@ -1188,13 +1188,27 @@ export function AppShell() {
   }
 
   function getSalesHistorySlotBuckets() {
-    const buckets = RESOLVED_SALES_SLOTS.map((slot) => ({
+    const buckets: Array<{
+      slot: (typeof RESOLVED_SALES_SLOTS)[number];
+      items: ReturnType<typeof getFilteredSalesHistoryItems>;
+      revenue: number;
+    }> = RESOLVED_SALES_SLOTS.map((slot) => ({
       slot,
       items: [] as ReturnType<typeof getFilteredSalesHistoryItems>,
+      revenue: 0,
     }));
 
+    const bucketByLabel = new Map(buckets.map((bucket) => [formatSlotLabel(bucket.slot), bucket]));
+
+    for (const receipt of getFilteredSalesHistory()) {
+      const bucket = bucketByLabel.get(getSalesHistorySlotLabel(receipt.timestamp));
+      if (bucket) {
+        bucket.revenue += receipt.totalAmount;
+      }
+    }
+
     for (const item of getFilteredSalesHistoryItems()) {
-      const bucket = buckets.find((entry) => formatSlotLabel(entry.slot) === item.slotLabel);
+      const bucket = bucketByLabel.get(item.slotLabel);
       if (bucket) {
         bucket.items.push(item);
       }
@@ -2448,14 +2462,17 @@ export function AppShell() {
                     {getSalesHistorySlotBuckets().length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-slate-400">No sold items match your filters.</div>
                     ) : (
-                      getSalesHistorySlotBuckets().map(({ slot, items }) => (
+                      getSalesHistorySlotBuckets().map(({ slot, items, revenue }) => (
                         <section key={slot.id} className="w-[19rem] shrink-0 rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
                           <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
                             <div>
                               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">{formatSlotLabel(slot)}</div>
                               <div className="text-sm text-slate-400">Auto filtered slot chart</div>
                             </div>
-                            <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{items.reduce((sum, item) => sum + item.qty, 0)} total</div>
+                            <div className="space-y-1 text-right">
+                              <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{items.reduce((sum, item) => sum + item.qty, 0)} total</div>
+                              <div className="text-xs font-semibold text-emerald-300">{formatCurrency(revenue)}</div>
+                            </div>
                           </div>
                           <div className="mt-3 grid grid-cols-[1fr_0.35fr] gap-2 border-b border-white/10 pb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">
                             <div>Item</div>
