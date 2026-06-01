@@ -1925,6 +1925,11 @@ export function AppShell() {
     }
   }
 
+  async function toggleAllCounterAdmins() {
+    const allEnabled = counterAdminUsers.length > 0 && counterAdminUsers.every((user) => user.isActive);
+    await setAllCounterAdmins(!allEnabled);
+  }
+
   async function updatePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAdminActionLoading("password");
@@ -2099,26 +2104,22 @@ export function AppShell() {
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-2xl font-semibold text-white">Counter Admins</h2>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => void setAllCounterAdmins(false)}
-                  disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0}
-                  className="rounded-2xl border border-red-300/20 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:opacity-60"
-                >
-                  {adminActionLoading === "bulk-status" && counterAdminUsers.some((user) => user.isActive)
-                    ? "Disabling..."
-                    : "Disable All Counter Admins"}
-                </button>
-                <button
-                  onClick={() => void setAllCounterAdmins(true)}
-                  disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0}
-                  className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/20 disabled:opacity-60"
-                >
-                  {adminActionLoading === "bulk-status" && counterAdminUsers.some((user) => !user.isActive)
-                    ? "Enabling..."
-                    : "Enable All Counter Admins"}
-                </button>
-              </div>
+              <button
+                onClick={() => void toggleAllCounterAdmins()}
+                disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0}
+                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-60 ${counterAdminUsers.every((user) => user.isActive)
+                  ? "border border-red-300/20 bg-red-400/10 text-red-100 hover:bg-red-400/20"
+                  : "border border-emerald-300/20 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20"
+                  }`}
+              >
+                {adminActionLoading === "bulk-status"
+                  ? "Updating..."
+                  : counterAdminUsers.length === 0
+                    ? "No counter admins"
+                    : counterAdminUsers.every((user) => user.isActive)
+                      ? "Disable All Counter Admins"
+                      : "Enable All Counter Admins"}
+              </button>
             </div>
             <div className="mt-4 space-y-3">
               {users.length === 0 ? (
