@@ -406,7 +406,8 @@ export function AppShell() {
     setWinnerRecords(data.winners || []);
   }
 
-  const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN" && user.isActive);
+  const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
+  const activeCounterAdminUsers = counterAdminUsers.filter((user) => user.isActive);
 
   async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1926,7 +1927,7 @@ export function AppShell() {
   }
 
   async function toggleAllCounterAdmins() {
-    const allEnabled = counterAdminUsers.length > 0 && counterAdminUsers.every((user) => user.isActive);
+    const allEnabled = counterAdminUsers.length > 0 && activeCounterAdminUsers.length === counterAdminUsers.length;
     await setAllCounterAdmins(!allEnabled);
   }
 
