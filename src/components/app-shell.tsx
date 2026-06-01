@@ -1896,10 +1896,7 @@ export function AppShell() {
     }
   }
 
-  async function toggleAllCounterAdmins() {
-    const allEnabled = counterAdminUsers.length > 0 && counterAdminUsers.every((user) => user.isActive);
-    const nextStatus = !allEnabled;
-
+  async function setAllCounterAdmins(isActive: boolean) {
     setAdminActionLoading("bulk-status");
     setMessage(null);
 
@@ -1907,7 +1904,7 @@ export function AppShell() {
       const response = await fetch("/api/admin/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: nextStatus }),
+        body: JSON.stringify({ isActive }),
       });
 
       const data = await response.json().catch(() => ({ error: "Network error" }));
@@ -1922,7 +1919,7 @@ export function AppShell() {
         await refreshUsers();
       }
 
-      setMessage(nextStatus ? "All counter admins enabled" : "All counter admins disabled");
+      setMessage(isActive ? "All counter admins enabled" : "All counter admins disabled");
     } finally {
       setAdminActionLoading(null);
     }
@@ -2102,15 +2099,26 @@ export function AppShell() {
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-2xl font-semibold text-white">Counter Admins</h2>
-              <button onClick={() => void toggleAllCounterAdmins()} disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0} className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-100 transition hover:bg-amber-400/20 disabled:opacity-60">
-                {adminActionLoading === "bulk-status"
-                  ? "Updating..."
-                  : counterAdminUsers.length === 0
-                    ? "No counter admins"
-                    : counterAdminUsers.every((user) => user.isActive)
-                      ? "Disable All Counter Admins"
-                      : "Enable All Counter Admins"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => void setAllCounterAdmins(false)}
+                  disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0}
+                  className="rounded-2xl border border-red-300/20 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:opacity-60"
+                >
+                  {adminActionLoading === "bulk-status" && counterAdminUsers.some((user) => user.isActive)
+                    ? "Disabling..."
+                    : "Disable All Counter Admins"}
+                </button>
+                <button
+                  onClick={() => void setAllCounterAdmins(true)}
+                  disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0}
+                  className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/20 disabled:opacity-60"
+                >
+                  {adminActionLoading === "bulk-status" && counterAdminUsers.some((user) => !user.isActive)
+                    ? "Enabling..."
+                    : "Enable All Counter Admins"}
+                </button>
+              </div>
             </div>
             <div className="mt-4 space-y-3">
               {users.length === 0 ? (
