@@ -1374,17 +1374,33 @@ export function AppShell() {
           </div>
 
           {activeMode === "service" && posScreen === "catalog" && selectedCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setPosScreen("cart")}
-              className="mt-3 w-full rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-lg shadow-emerald-500/20"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
-                <span className="text-base">View Cart — {formatCurrency(total)}</span>
-                <span>›</span>
-              </div>
-            </button>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPosScreen("cart")}
+                className="w-full rounded-[1.5rem] bg-emerald-400 p-4 text-left font-semibold text-emerald-950 shadow-lg shadow-emerald-500/20 flex flex-col justify-between h-20 transition active:scale-[0.98]"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="rounded-full bg-emerald-950/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider">{selectedCount} items</span>
+                  <span className="text-lg">›</span>
+                </div>
+                <span className="text-xs font-bold leading-tight truncate w-full">View Cart — {formatCurrency(total)}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => saveFromQuantities(true)}
+                disabled={receiptActionLoading !== null}
+                className="w-full rounded-[1.5rem] bg-red-500 p-4 text-left font-semibold text-white shadow-lg shadow-red-500/20 flex flex-col justify-between h-20 transition active:scale-[0.98] disabled:opacity-60"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider">⚡ Direct</span>
+                </div>
+                <span className="text-xs font-bold leading-tight truncate w-full">
+                  {receiptActionLoading === "charge" ? "Charging..." : `Charge — ${formatCurrency(total)}`}
+                </span>
+              </button>
+            </div>
           )}
         </section>
 
