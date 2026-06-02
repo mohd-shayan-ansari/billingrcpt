@@ -354,6 +354,26 @@ export function AppShell() {
     return () => window.clearInterval(timer);
   }, [session]);
 
+  // Session heartbeat: auto-logout disabled counter admins every 30 seconds
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        const resp = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!resp.ok) {
+          forceLogout("Your account has been disabled. Please contact the admin.");
+        }
+      } catch {
+        // network error — ignore, don't log out for connectivity issues
+      }
+    }, 30_000);
+
+    return () => window.clearInterval(interval);
+  }, [session]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       const nextSlotId = getCurrentSalesSlotId();
@@ -727,6 +747,9 @@ export function AppShell() {
   async function refreshReceipts(nextSearch = search) {
     const response = await fetch(`/api/receipts?search=${encodeURIComponent(nextSearch)}`, { cache: "no-store" });
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        forceLogout("Your account has been disabled. Please contact the admin.");
+      }
       return;
     }
 
@@ -754,6 +777,9 @@ export function AppShell() {
 
       const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
       if (!response.ok || !data.receipt) {
+        if (response.status === 401 || response.status === 403) {
+          forceLogout("Your account has been disabled. Please contact the admin.");
+        }
         return null;
       }
 
@@ -2010,6 +2036,14 @@ export function AppShell() {
     setCurrentPage("dashboard");
     setMenuOpen(false);
     setMessage(null);
+  }
+
+  function forceLogout(reason: string) {
+    void fetch("/api/auth/logout", { method: "POST" });
+    setSession(null);
+    setCurrentPage("dashboard");
+    setMenuOpen(false);
+    setMessage(reason);
   }
 
   if (loading) {
