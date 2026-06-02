@@ -21,7 +21,6 @@ export type SessionUser = {
   name: string;
   username: string;
   role: "MASTER_ADMIN" | "COUNTER_ADMIN";
-  isActive: boolean;
 };
 
 export async function hashPassword(password: string) {
@@ -76,7 +75,6 @@ export async function getSessionFromRequest(request?: Request) {
       name: user.name,
       username: user.username,
       role: user.role,
-      isActive: user.isActive,
     } satisfies SessionUser;
   } catch {
     return null;

@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const users = await prisma.user.findMany({
     where: { role: Role.COUNTER_ADMIN },
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
+    select: { id: true, name: true, username: true, role: true, createdAt: true },
   });
 
   return NextResponse.json({ users });
@@ -56,36 +56,8 @@ export async function POST(request: Request) {
       role: Role.COUNTER_ADMIN,
       isActive: true,
     },
-    select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
+    select: { id: true, name: true, username: true, role: true, createdAt: true },
   });
 
   return NextResponse.json({ user }, { status: 201 });
-}
-
-export async function PATCH(request: Request) {
-  const session = await getSessionFromRequest(request);
-
-  if (!session || session.role !== "MASTER_ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const body = await request.json().catch(() => null);
-  const isActive = Boolean(body?.isActive);
-
-  const result = await prisma.user.updateMany({
-    where: { role: Role.COUNTER_ADMIN },
-    data: { isActive },
-  });
-
-  const users = await prisma.user.findMany({
-    where: { role: Role.COUNTER_ADMIN },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
-  });
-
-  return NextResponse.json({
-    ok: true,
-    updatedCount: result.count,
-    users,
-  });
-}
+}

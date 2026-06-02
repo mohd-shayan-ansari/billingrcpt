@@ -9,6 +9,7 @@ import { Share } from "@capacitor/share";
 import { SplashScreen } from "@capacitor/splash-screen";
 
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
+import { RESOLVED_SALES_SLOTS, isReceiptGenerationLocked } from "@/lib/time";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
 import type { ReceiptLike } from "@/lib/printer/types";
@@ -18,7 +19,6 @@ type SessionUser = {
   name: string;
   username: string;
   role: "MASTER_ADMIN" | "COUNTER_ADMIN";
-  isActive: boolean;
 };
 
 type RateMap = Record<(typeof RECEIPT_KEYS)[number], number>;
@@ -117,8 +117,7 @@ type UserRecord = {
   id: string;
   name: string;
   username: string;
-  role: string;
-  isActive: boolean;
+  role: "MASTER_ADMIN" | "COUNTER_ADMIN";
   createdAt: string;
 };
 
@@ -202,39 +201,7 @@ const POS_CODE_GRID: Record<(typeof RECEIPT_KEYS)[number], string[]> = {
   result: Array.from({ length: 100 }, (_, index) => String(index).padStart(2, "0")),
 };
 
-const SALES_TIME_SLOTS = [
-  "09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:20", "11:40", "12:00", "12:20", "12:40",
-  "01:00", "01:20", "01:40", "02:00", "02:20", "02:40", "03:00", "03:20", "03:40", "04:00", "04:20", "04:40", "05:00", "05:20", "05:40",
-  "06:00", "06:20", "06:40", "07:00", "07:20", "07:40", "08:00", "08:20", "08:40", "09:00", "09:20", "09:40", "10:00", "10:20", "10:40",
-] as const;
 
-function resolveSalesSlots(slots: readonly string[]) {
-  let offsetMinutes = 0;
-  let previous = -1;
-
-  return slots.map((label, index) => {
-    const [hourPart, minutePart] = label.split(":").map((part) => Number(part));
-    let hour = hourPart % 12;
-    if (hour === 0) {
-      hour = 12;
-    }
-
-    let absolute = hour * 60 + minutePart + offsetMinutes;
-    while (absolute <= previous) {
-      offsetMinutes += 12 * 60;
-      absolute = hour * 60 + minutePart + offsetMinutes;
-    }
-
-    previous = absolute;
-    return {
-      id: `${label}-${index}`,
-      label,
-      minutes: absolute % (24 * 60),
-    };
-  });
-}
-
-const RESOLVED_SALES_SLOTS = resolveSalesSlots(SALES_TIME_SLOTS);
 
 function getSalesSlotForMinutes(minutesSinceMidnight: number) {
   for (const slot of RESOLVED_SALES_SLOTS) {
@@ -319,6 +286,7 @@ export function AppShell() {
   const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "bulk-status" | "password" | null>(null);
   const [resetReceiptsLoading, setResetReceiptsLoading] = useState(false);
   const pendingReceiptSyncInFlight = useRef(false);
+  const [isLocked, setIsLocked] = useState(() => isReceiptGenerationLocked());
 
   useEffect(() => {
     const savedMode = window.localStorage.getItem("billinglottery.receiptExportMode");
@@ -425,7 +393,7 @@ export function AppShell() {
   }
 
   const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
-  const activeCounterAdminUsers = counterAdminUsers.filter((user) => user.isActive);
+  const activeCounterAdminUsers = counterAdminUsers;
 
   async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -921,34 +889,14 @@ export function AppShell() {
     }
   }
 
-  // Periodically refresh the session's isActive status (every 1 s).
-  // When a master admin enables/disables a counter admin, the UI updates almost instantly.
+  // Update the receipt generation lock status every second.
   useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    const interval = window.setInterval(async () => {
-      try {
-        const resp = await fetch("/api/auth/me", { cache: "no-store" });
-        if (!resp.ok) {
-          // 401 here means the JWT cookie itself is gone/invalid — user needs to re-login.
-          // Ignore other errors (network, 5xx) so we don't disrupt the session unnecessarily.
-          return;
-        }
-        const data = (await resp.json()) as { user: SessionUser };
-        if (data?.user) {
-          setSession((prev) =>
-            prev ? { ...prev, isActive: data.user.isActive } : prev
-          );
-        }
-      } catch {
-        // network error — ignore
-      }
+    const interval = window.setInterval(() => {
+      setIsLocked(isReceiptGenerationLocked());
     }, 1_000);
 
     return () => window.clearInterval(interval);
-  }, [session]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -999,8 +947,8 @@ export function AppShell() {
   }, [heading, lastReceipt]);
 
   async function submitReceipt() {
-    if (!session || session.isActive === false) {
-      setMessage("Your account is currently disabled. New receipts cannot be created.");
+    if (isLocked) {
+      setMessage("Receipt generation is locked for the last 2 minutes of the slot.");
       return;
     }
     setMessage(null);
@@ -1008,8 +956,8 @@ export function AppShell() {
   }
 
   async function saveAndShare() {
-    if (!session || session.isActive === false) {
-      setMessage("Your account is currently disabled. New receipts cannot be created.");
+    if (isLocked) {
+      setMessage("Receipt generation is locked for the last 2 minutes of the slot.");
       return;
     }
     setMessage(null);
@@ -1356,17 +1304,17 @@ export function AppShell() {
 
     return (
       <div className="space-y-4 pb-36">
-        {/* Disabled account banner — shown only when counter admin is disabled */}
-        {currentSession.role === "COUNTER_ADMIN" && !currentSession.isActive && (
+        {/* Locking banner — shown when inside the 120s locking window */}
+        {currentSession.role === "COUNTER_ADMIN" && isLocked && (
           <div className="rounded-[1.75rem] border border-red-500/40 bg-red-500/10 p-4 shadow-lg shadow-red-900/20 backdrop-blur">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-400 text-xl">
-                🚫
+                ⏳
               </div>
               <div>
-                <p className="font-semibold text-red-300">Account Disabled</p>
+                <p className="font-semibold text-red-300">Locking Period Active</p>
                 <p className="mt-0.5 text-sm text-red-400/80">
-                  Your account has been temporarily disabled by the master admin. You can view your existing receipts, but <strong className="text-red-300">new receipts cannot be created</strong> until your account is re-enabled.
+                  Receipt generation is paused for the <strong className="text-red-300">last 2 minutes</strong> of this time slot. It will automatically unlock at the start of the next slot.
                 </p>
               </div>
             </div>
@@ -1437,7 +1385,7 @@ export function AppShell() {
               <button
                 type="button"
                 onClick={() => saveFromQuantities(true)}
-                disabled={receiptActionLoading !== null || !currentSession.isActive}
+                disabled={receiptActionLoading !== null || isLocked}
                 className="w-full rounded-[1.5rem] bg-red-500 p-4 text-left font-semibold text-white shadow-lg shadow-red-500/20 flex flex-col justify-between h-20 transition active:scale-[0.98] disabled:opacity-60"
               >
                 <div className="flex items-center justify-between w-full">
@@ -1500,8 +1448,8 @@ export function AppShell() {
 
               <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={addEntryRow} className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white">Add line</button>
-                <button type="button" onClick={submitReceipt} disabled={!currentSession.isActive} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed">Save</button>
-                <button type="button" onClick={saveAndShare} disabled={!currentSession.isActive} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 disabled:opacity-40 disabled:cursor-not-allowed">{receiptExportMode === "open" ? "Save & Open" : "Save & Share"}</button>
+                <button type="button" onClick={submitReceipt} disabled={isLocked} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed">Save</button>
+                <button type="button" onClick={saveAndShare} disabled={isLocked} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 disabled:opacity-40 disabled:cursor-not-allowed">{receiptExportMode === "open" ? "Save & Open" : "Save & Share"}</button>
               </div>
             </div>
           </section>
@@ -1603,7 +1551,7 @@ export function AppShell() {
                     <button
                       type="button"
                       onClick={() => saveFromQuantities(false)}
-                      disabled={receiptActionLoading !== null || !currentSession.isActive}
+                      disabled={receiptActionLoading !== null || isLocked}
                       className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                     >
                       {receiptActionLoading === "save" ? "Saving..." : "Save Only"}
@@ -1611,7 +1559,7 @@ export function AppShell() {
                     <button
                       type="button"
                       onClick={() => saveFromQuantities(true)}
-                      disabled={receiptActionLoading !== null || !currentSession.isActive}
+                      disabled={receiptActionLoading !== null || isLocked}
                       className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                     >
                       {receiptActionLoading === "charge" ? "Charging..." : `Charge ${formatCurrency(total)}`}
@@ -1648,8 +1596,8 @@ export function AppShell() {
   }
 
   async function saveFromQuantities(autoDownload = true) {
-    if (!session || session.isActive === false) {
-      setMessage("Your account is currently disabled. New receipts cannot be created.");
+    if (isLocked) {
+      setMessage("Receipt generation is locked for the last 2 minutes of the slot.");
       return;
     }
     setReceiptActionLoading(autoDownload ? "charge" : "save");
@@ -2006,40 +1954,6 @@ export function AppShell() {
     }
   }
 
-  async function setAllCounterAdmins(isActive: boolean) {
-    setAdminActionLoading("bulk-status");
-    setMessage(null);
-
-    try {
-      const response = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive }),
-      });
-
-      const data = await response.json().catch(() => ({ error: "Network error" }));
-      if (!response.ok) {
-        setMessage(data.error ?? "Unable to update counter admin status");
-        return;
-      }
-
-      if (Array.isArray(data.users)) {
-        setUsers(data.users);
-      } else {
-        await refreshUsers();
-      }
-
-      setMessage(isActive ? "All counter admins enabled" : "All counter admins disabled");
-    } finally {
-      setAdminActionLoading(null);
-    }
-  }
-
-  async function toggleAllCounterAdmins() {
-    const allEnabled = counterAdminUsers.length > 0 && activeCounterAdminUsers.length === counterAdminUsers.length;
-    await setAllCounterAdmins(!allEnabled);
-  }
-
   async function updatePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAdminActionLoading("password");
@@ -2222,22 +2136,6 @@ export function AppShell() {
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-2xl font-semibold text-white">Counter Admins</h2>
-              <button
-                onClick={() => void toggleAllCounterAdmins()}
-                disabled={adminActionLoading === "bulk-status" || counterAdminUsers.length === 0}
-                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-60 ${counterAdminUsers.every((user) => user.isActive)
-                  ? "border border-red-300/20 bg-red-400/10 text-red-100 hover:bg-red-400/20"
-                  : "border border-emerald-300/20 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20"
-                  }`}
-              >
-                {adminActionLoading === "bulk-status"
-                  ? "Updating..."
-                  : counterAdminUsers.length === 0
-                    ? "No counter admins"
-                    : counterAdminUsers.every((user) => user.isActive)
-                      ? "Disable All Counter Admins"
-                      : "Enable All Counter Admins"}
-              </button>
             </div>
             <div className="mt-4 space-y-3">
               {users.length === 0 ? (
@@ -2248,9 +2146,6 @@ export function AppShell() {
                     <div>
                       <div className="font-semibold text-white">{user.name}</div>
                       <div className="text-sm text-slate-400">{user.username}</div>
-                      <div className="mt-1 inline-flex rounded-full border border-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
-                        {user.isActive ? "Enabled" : "Disabled"}
-                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-end">
                       <button onClick={() => deleteUser(user.id)} disabled={adminActionLoading === "delete" || session?.id === user.id} className="rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/20 disabled:opacity-60">{session?.id === user.id ? "Self" : adminActionLoading === "delete" ? "Removing..." : "Remove"}</button>
