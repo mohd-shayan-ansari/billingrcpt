@@ -24,6 +24,7 @@
         "@capacitor/core": "^7.6.5",
         "@capacitor/filesystem": "^7.1.8",
         "@capacitor/share": "^7.0.4",
+        "@capacitor/splash-screen": "^7.0.5",
         "@prisma/client": "^6.16.0",
         "@tailwindcss/postcss": "^4",
         "bcryptjs": "^3.0.3",

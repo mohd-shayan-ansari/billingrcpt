@@ -6,6 +6,7 @@ import { useRef } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { SplashScreen } from "@capacitor/splash-screen";
 
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
 import { buildReceiptLines } from "@/lib/receipt";
@@ -582,6 +583,9 @@ export function AppShell() {
         }
       } finally {
         setLoading(false);
+        if (Capacitor.isNativePlatform()) {
+          void SplashScreen.hide();
+        }
       }
     })();
   }, []);
@@ -917,8 +921,8 @@ export function AppShell() {
     }
   }
 
-  // Periodically refresh the session's isActive status (every 30 s).
-  // When a master admin enables/disables a counter admin, the UI updates within 30 s.
+  // Periodically refresh the session's isActive status (every 3 s).
+  // When a master admin enables/disables a counter admin, the UI updates almost instantly.
   useEffect(() => {
     if (!session) {
       return;
@@ -941,7 +945,7 @@ export function AppShell() {
       } catch {
         // network error — ignore
       }
-    }, 30_000);
+    }, 3_000);
 
     return () => window.clearInterval(interval);
   }, [session]);
