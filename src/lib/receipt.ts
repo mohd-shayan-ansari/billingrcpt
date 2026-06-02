@@ -108,10 +108,10 @@ function formatColumns(no: string, qty: string, rate: string, total: string) {
   const w4 = 9;
   
   return [
-    centerLine(no, w1),
-    centerLine(qty, w2),
-    centerLine(rate, w3),
-    centerLine(total, w4),
+    leftAlign(no, w1),
+    rightAlign(qty, w2),
+    rightAlign(rate, w3),
+    rightAlign(total, w4),
   ].join("");
 }
 

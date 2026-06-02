@@ -311,6 +311,7 @@ export function AppShell() {
   const [salesSlotFilterId, setSalesSlotFilterId] = useState<string>(getCurrentSalesSlotId());
   const [salesChartFilter, setSalesChartFilter] = useState<"all" | (typeof RECEIPT_KEYS)[number]>("all");
   const [receiptExportMode, setReceiptExportMode] = useState<ReceiptExportMode>("share");
+  const [receiptFontSize, setReceiptFontSize] = useState<number>(15);
   const [receiptModalReceipt, setReceiptModalReceipt] = useState<ReceiptRecord | null>(null);
   const [receiptActionLoading, setReceiptActionLoading] = useState<"save" | "charge" | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState<"create" | "delete" | "bulk-status" | "password" | null>(null);
@@ -322,11 +323,22 @@ export function AppShell() {
     if (savedMode === "share" || savedMode === "open") {
       setReceiptExportMode(savedMode);
     }
+    const savedSize = window.localStorage.getItem("billinglottery.receiptFontSize");
+    if (savedSize) {
+      const parsed = parseInt(savedSize, 10);
+      if (!isNaN(parsed) && parsed >= 8 && parsed <= 32) {
+        setReceiptFontSize(parsed);
+      }
+    }
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("billinglottery.receiptExportMode", receiptExportMode);
   }, [receiptExportMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem("billinglottery.receiptFontSize", String(receiptFontSize));
+  }, [receiptFontSize]);
 
   useEffect(() => {
     if (!session) {
@@ -1726,10 +1738,10 @@ export function AppShell() {
     }
 
     const scale = 1.5;
-    const fontSize = 15;
-    const itemFontSize = 19;
-    const lineHeight = 20;
-    const itemLineHeight = 25;
+    const fontSize = receiptFontSize;
+    const itemFontSize = receiptFontSize; // Use uniform font size to ensure perfect column alignment
+    const lineHeight = Math.round(fontSize * 1.33);
+    const itemLineHeight = lineHeight;
     const padding = 16;
     const fontFamily = '"Courier New", Courier, monospace';
     const defaultFont = `bold ${fontSize}px ${fontFamily}`;
@@ -2713,6 +2725,46 @@ export function AppShell() {
             </div>
             <p className="mt-3 text-xs text-slate-500">Open With saves the receipt and launches Android&apos;s app chooser after charge.</p>
           </div>
+
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Receipt Font Size</h3>
+                <p className="text-sm text-slate-400">Increase or decrease text size for receipts.</p>
+              </div>
+              <div className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-emerald-300">
+                {receiptFontSize}px
+              </div>
+            </div>
+            
+            <div className="mt-4 flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setReceiptFontSize((prev) => Math.max(10, prev - 1))}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-slate-950/70 text-xl font-bold text-white transition hover:bg-white/10 active:scale-95"
+              >
+                −
+              </button>
+              
+              <div className="flex-1 rounded-[1.2rem] border border-white/10 bg-slate-950/70 p-3 text-center overflow-hidden flex items-center justify-center min-h-[3rem]">
+                <span className="font-mono text-xs text-slate-400 mr-2">Preview:</span>
+                <span 
+                  className="font-mono font-bold text-white transition-all duration-200 block"
+                  style={{ fontSize: `${receiptFontSize}px` }}
+                >
+                  BH-0    2    ₹110
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setReceiptFontSize((prev) => Math.min(24, prev + 1))}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400 text-xl font-bold text-slate-950 transition hover:bg-emerald-300 active:scale-95"
+              >
+                +
+              </button>
+            </div>
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             {session.role === "MASTER_ADMIN" ? (
               <>
@@ -2754,14 +2806,17 @@ export function AppShell() {
                 </div>
                 <button type="button" onClick={() => setReceiptModalReceipt(null)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Close</button>
               </div>
-            <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-3 text-slate-900">
-              <div className="space-y-1 font-mono text-[10px] font-bold leading-[1.35]">
+            <div className="mt-4 rounded-[1.6rem] border border-slate-300 bg-white p-3 text-slate-900 overflow-x-auto">
+              <div 
+                className="space-y-1 font-mono font-bold leading-[1.35]"
+                style={{ fontSize: `${receiptFontSize}px` }}
+              >
                 {buildReceiptLines({
                   receiptNumber: receiptModalReceipt.receiptNumber,
                   heading: receiptModalReceipt.heading ?? heading,
                   timestamp: new Date(receiptModalReceipt.timestamp),
                   entries: toReceiptEntries(receiptModalReceipt),
-                }).lines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
+                }).lines.map((line, index) => <div key={`${line}-${index}`} className="whitespace-pre">{line}</div>)}
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
