@@ -353,7 +353,11 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await prisma.receipt.deleteMany({});
+  // Delete receipts and winner deductions together atomically
+  await prisma.$transaction([
+    prisma.winnerDeduction.deleteMany({}),
+    prisma.receipt.deleteMany({}),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

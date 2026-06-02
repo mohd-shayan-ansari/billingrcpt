@@ -871,7 +871,7 @@ export function AppShell() {
       return;
     }
 
-    const confirmed = window.confirm("Delete all receipts and restart receipt numbers from the beginning?");
+    const confirmed = window.confirm("Delete all receipts AND winner deductions, and restart receipt numbers from the beginning?");
     if (!confirmed) {
       return;
     }
@@ -895,6 +895,12 @@ export function AppShell() {
       setReceiptModalReceipt(null);
       setNextReceiptNumber("PENDING");
       setSalesReceiptSearch("");
+      // Also clear winner deductions and sales totals from UI state
+      setWinnerRecords([]);
+      setSalesData([]);
+      setGrandTotal(0);
+      setTodayRevenue(0);
+      setTodayReceiptsCount(0);
       await refreshReceipts("");
       const nextResponse = await fetch(`/api/receipts/next?heading=${encodeURIComponent(heading)}`, { cache: "no-store" });
       if (nextResponse.ok) {
@@ -903,7 +909,7 @@ export function AppShell() {
           setNextReceiptNumber(String(nextData.receiptNumber));
         }
       }
-      setMessage("All receipts deleted. Receipt numbers restarted.");
+      setMessage("All receipts and winner deductions deleted. Receipt numbers restarted.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to reset receipts");
     } finally {
