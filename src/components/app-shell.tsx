@@ -921,7 +921,7 @@ export function AppShell() {
     }
   }
 
-  // Periodically refresh the session's isActive status (every 3 s).
+  // Periodically refresh the session's isActive status (every 1 s).
   // When a master admin enables/disables a counter admin, the UI updates almost instantly.
   useEffect(() => {
     if (!session) {
@@ -945,7 +945,7 @@ export function AppShell() {
       } catch {
         // network error — ignore
       }
-    }, 3_000);
+    }, 1_000);
 
     return () => window.clearInterval(interval);
   }, [session]);
