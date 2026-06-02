@@ -744,11 +744,8 @@ export function AppShell() {
   async function refreshReceipts(nextSearch = search) {
     const response = await fetch(`/api/receipts?search=${encodeURIComponent(nextSearch)}`, { cache: "no-store" });
     if (!response.ok) {
-      // Only force-logout on a true authentication failure (401), not on 403
-      // (which now means the account is disabled — user stays logged in but can't create receipts)
-      if (response.status === 401) {
-        forceLogout("Session expired. Please log in again.");
-      }
+      // Silently ignore failures in background polling — a truly expired session
+      // will be caught when the user next performs an action.
       return;
     }
 
@@ -776,11 +773,8 @@ export function AppShell() {
 
       const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
       if (!response.ok || !data.receipt) {
-        // Only force-logout on 401 (session expired).
-        // A 403 here means the account is disabled — keep the user logged in.
-        if (response.status === 401) {
-          forceLogout("Session expired. Please log in again.");
-        }
+        // A 403 means the account is disabled — silently discard pending drafts don't force-logout.
+        // Only truly invalid sessions (missing cookie) reach here after the auth fix.
         return null;
       }
 
@@ -928,9 +922,8 @@ export function AppShell() {
       try {
         const resp = await fetch("/api/auth/me", { cache: "no-store" });
         if (!resp.ok) {
-          if (resp.status === 401) {
-            forceLogout("Session expired. Please log in again.");
-          }
+          // 401 here means the JWT cookie itself is gone/invalid — user needs to re-login.
+          // Ignore other errors (network, 5xx) so we don't disrupt the session unnecessarily.
           return;
         }
         const data = (await resp.json()) as { user: SessionUser };

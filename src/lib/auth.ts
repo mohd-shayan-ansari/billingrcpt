@@ -45,6 +45,14 @@ export async function createSessionToken(user: Pick<SessionUser, "id" | "name" |
     .sign(getJwtSecret());
 }
 
+/**
+ * Resolves the session cookie to a SessionUser.
+ * Returns null ONLY when the cookie is missing/invalid or the user no longer exists.
+ * Does NOT reject inactive users — isActive is included in the return value so
+ * individual endpoints can enforce their own access rules (e.g. POST /receipts).
+ * This means a counter admin whose account is disabled keeps a valid session and
+ * stays logged in; they are simply blocked from creating new receipts.
+ */
 export async function getSessionFromRequest(request?: Request) {
   const token = request
     ? request.headers.get("cookie")?.match(/billinglottery_token=([^;]+)/)?.[1]
@@ -58,40 +66,7 @@ export async function getSessionFromRequest(request?: Request) {
     const { payload } = await jwtVerify(token, getJwtSecret());
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
 
-    if (!user || !user.isActive) {
-      return null;
-    }
-
-    return {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      role: user.role,
-      isActive: user.isActive,
-    } satisfies SessionUser;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Same as getSessionFromRequest but does NOT reject inactive users.
- * Use only for the /api/auth/me endpoint so disabled counter admins
- * remain logged in while being blocked from creating new receipts.
- */
-export async function getSessionFromRequestIncludingInactive(request?: Request): Promise<SessionUser | null> {
-  const token = request
-    ? request.headers.get("cookie")?.match(/billinglottery_token=([^;]+)/)?.[1]
-    : (await cookies()).get(COOKIE_NAME)?.value;
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const { payload } = await jwtVerify(token, getJwtSecret());
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-
+    // Only reject if the user account has been fully deleted from the DB.
     if (!user) {
       return null;
     }
@@ -114,4 +89,4 @@ export function createAuthCookie(token: string) {
 
 export function clearAuthCookie() {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;`;
-}
+}
