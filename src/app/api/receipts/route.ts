@@ -192,6 +192,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Disabled counter admins cannot generate new receipts
+  if (session.role === "COUNTER_ADMIN" && !session.isActive) {
+    return NextResponse.json({ error: "Your account has been disabled. You cannot create new receipts." }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = createReceiptSchema.safeParse(body);
 

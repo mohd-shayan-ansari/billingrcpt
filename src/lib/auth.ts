@@ -21,6 +21,7 @@ export type SessionUser = {
   name: string;
   username: string;
   role: "MASTER_ADMIN" | "COUNTER_ADMIN";
+  isActive: boolean;
 };
 
 export async function hashPassword(password: string) {
@@ -31,7 +32,7 @@ export async function verifyPassword(password: string, passwordHash: string) {
   return bcrypt.compare(password, passwordHash);
 }
 
-export async function createSessionToken(user: SessionUser) {
+export async function createSessionToken(user: Pick<SessionUser, "id" | "name" | "username" | "role">) {
   return new SignJWT({
     name: user.name,
     username: user.username,
@@ -66,6 +67,41 @@ export async function getSessionFromRequest(request?: Request) {
       name: user.name,
       username: user.username,
       role: user.role,
+      isActive: user.isActive,
+    } satisfies SessionUser;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Same as getSessionFromRequest but does NOT reject inactive users.
+ * Use only for the /api/auth/me endpoint so disabled counter admins
+ * remain logged in while being blocked from creating new receipts.
+ */
+export async function getSessionFromRequestIncludingInactive(request?: Request): Promise<SessionUser | null> {
+  const token = request
+    ? request.headers.get("cookie")?.match(/billinglottery_token=([^;]+)/)?.[1]
+    : (await cookies()).get(COOKIE_NAME)?.value;
+
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecret());
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      isActive: user.isActive,
     } satisfies SessionUser;
   } catch {
     return null;

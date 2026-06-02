@@ -17,6 +17,7 @@ type SessionUser = {
   name: string;
   username: string;
   role: "MASTER_ADMIN" | "COUNTER_ADMIN";
+  isActive: boolean;
 };
 
 type RateMap = Record<(typeof RECEIPT_KEYS)[number], number>;
@@ -366,25 +367,9 @@ export function AppShell() {
     return () => window.clearInterval(timer);
   }, [session]);
 
-  // Session heartbeat: auto-logout disabled counter admins every 30 seconds
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    const interval = window.setInterval(async () => {
-      try {
-        const resp = await fetch("/api/auth/me", { cache: "no-store" });
-        if (!resp.ok) {
-          forceLogout("Your account has been disabled. Please contact the admin.");
-        }
-      } catch {
-        // network error — ignore, don't log out for connectivity issues
-      }
-    }, 30_000);
-
-    return () => window.clearInterval(interval);
-  }, [session]);
+  // NOTE: Auto-logout for disabled counter admins has been intentionally removed.
+  // When a master admin disables a counter admin, the counter admin stays logged in
+  // but is blocked from generating new receipts (enforced both in the UI and the API).
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -759,8 +744,10 @@ export function AppShell() {
   async function refreshReceipts(nextSearch = search) {
     const response = await fetch(`/api/receipts?search=${encodeURIComponent(nextSearch)}`, { cache: "no-store" });
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        forceLogout("Your account has been disabled. Please contact the admin.");
+      // Only force-logout on a true authentication failure (401), not on 403
+      // (which now means the account is disabled — user stays logged in but can't create receipts)
+      if (response.status === 401) {
+        forceLogout("Session expired. Please log in again.");
       }
       return;
     }
@@ -789,8 +776,10 @@ export function AppShell() {
 
       const data = (await response.json().catch(() => ({}))) as { receipt?: ReceiptRecord; error?: string };
       if (!response.ok || !data.receipt) {
-        if (response.status === 401 || response.status === 403) {
-          forceLogout("Your account has been disabled. Please contact the admin.");
+        // Only force-logout on 401 (session expired).
+        // A 403 here means the account is disabled — keep the user logged in.
+        if (response.status === 401) {
+          forceLogout("Session expired. Please log in again.");
         }
         return null;
       }
@@ -928,6 +917,36 @@ export function AppShell() {
     }
   }
 
+  // Periodically refresh the session's isActive status (every 30 s).
+  // When a master admin enables/disables a counter admin, the UI updates within 30 s.
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        const resp = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!resp.ok) {
+          if (resp.status === 401) {
+            forceLogout("Session expired. Please log in again.");
+          }
+          return;
+        }
+        const data = (await resp.json()) as { user: SessionUser };
+        if (data?.user) {
+          setSession((prev) =>
+            prev ? { ...prev, isActive: data.user.isActive } : prev
+          );
+        }
+      } catch {
+        // network error — ignore
+      }
+    }, 30_000);
+
+    return () => window.clearInterval(interval);
+  }, [session]);
+
   useEffect(() => {
     let active = true;
 
@@ -977,11 +996,19 @@ export function AppShell() {
   }, [heading, lastReceipt]);
 
   async function submitReceipt() {
+    if (!session || session.isActive === false) {
+      setMessage("Your account is currently disabled. New receipts cannot be created.");
+      return;
+    }
     setMessage(null);
     queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: false });
   }
 
   async function saveAndShare() {
+    if (!session || session.isActive === false) {
+      setMessage("Your account is currently disabled. New receipts cannot be created.");
+      return;
+    }
     setMessage(null);
     const queued = queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: true });
     if (!queued) {
@@ -1326,6 +1353,23 @@ export function AppShell() {
 
     return (
       <div className="space-y-4 pb-36">
+        {/* Disabled account banner — shown only when counter admin is disabled */}
+        {currentSession.role === "COUNTER_ADMIN" && !currentSession.isActive && (
+          <div className="rounded-[1.75rem] border border-red-500/40 bg-red-500/10 p-4 shadow-lg shadow-red-900/20 backdrop-blur">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-400 text-xl">
+                🚫
+              </div>
+              <div>
+                <p className="font-semibold text-red-300">Account Disabled</p>
+                <p className="mt-0.5 text-sm text-red-400/80">
+                  Your account has been temporarily disabled by the master admin. You can view your existing receipts, but <strong className="text-red-300">new receipts cannot be created</strong> until your account is re-enabled.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="Today Receipts" value={String(todayReceiptCountValue)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
@@ -1390,7 +1434,7 @@ export function AppShell() {
               <button
                 type="button"
                 onClick={() => saveFromQuantities(true)}
-                disabled={receiptActionLoading !== null}
+                disabled={receiptActionLoading !== null || !currentSession.isActive}
                 className="w-full rounded-[1.5rem] bg-red-500 p-4 text-left font-semibold text-white shadow-lg shadow-red-500/20 flex flex-col justify-between h-20 transition active:scale-[0.98] disabled:opacity-60"
               >
                 <div className="flex items-center justify-between w-full">
@@ -1453,8 +1497,8 @@ export function AppShell() {
 
               <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={addEntryRow} className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white">Add line</button>
-                <button type="button" onClick={submitReceipt} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200">Save</button>
-                <button type="button" onClick={saveAndShare} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950">{receiptExportMode === "open" ? "Save &amp; Open" : "Save &amp; Share"}</button>
+                <button type="button" onClick={submitReceipt} disabled={!currentSession.isActive} className="flex-1 rounded-2xl border border-emerald-300/50 bg-emerald-300/15 px-4 py-3 font-semibold text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed">Save</button>
+                <button type="button" onClick={saveAndShare} disabled={!currentSession.isActive} className="flex-1 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 disabled:opacity-40 disabled:cursor-not-allowed">{receiptExportMode === "open" ? "Save & Open" : "Save & Share"}</button>
               </div>
             </div>
           </section>
@@ -1556,7 +1600,7 @@ export function AppShell() {
                     <button
                       type="button"
                       onClick={() => saveFromQuantities(false)}
-                      disabled={receiptActionLoading !== null}
+                      disabled={receiptActionLoading !== null || !currentSession.isActive}
                       className="rounded-[1.25rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                     >
                       {receiptActionLoading === "save" ? "Saving..." : "Save Only"}
@@ -1564,7 +1608,7 @@ export function AppShell() {
                     <button
                       type="button"
                       onClick={() => saveFromQuantities(true)}
-                      disabled={receiptActionLoading !== null}
+                      disabled={receiptActionLoading !== null || !currentSession.isActive}
                       className="rounded-[1.25rem] bg-red-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                     >
                       {receiptActionLoading === "charge" ? "Charging..." : `Charge ${formatCurrency(total)}`}
@@ -1601,6 +1645,10 @@ export function AppShell() {
   }
 
   async function saveFromQuantities(autoDownload = true) {
+    if (!session || session.isActive === false) {
+      setMessage("Your account is currently disabled. New receipts cannot be created.");
+      return;
+    }
     setReceiptActionLoading(autoDownload ? "charge" : "save");
     setMessage(null);
 

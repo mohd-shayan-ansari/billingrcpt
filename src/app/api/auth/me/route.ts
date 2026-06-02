@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getSessionFromRequestIncludingInactive } from "@/lib/auth";
 
 export async function GET(request: Request) {
-  const session = await getSessionFromRequest(request);
+  const session = await getSessionFromRequestIncludingInactive(request);
 
   if (!session) {
     return NextResponse.json({ user: null }, { status: 401 });
