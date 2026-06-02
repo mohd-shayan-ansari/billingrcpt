@@ -1246,7 +1246,7 @@ export function AppShell() {
       .filter((bucket) => bucket.items.length > 0)
       .map((bucket) => ({
         ...bucket,
-        items: [...bucket.items].sort((left, right) => right.qty - left.qty),
+        items: [...bucket.items].sort((left, right) => left.shortLabel.localeCompare(right.shortLabel, undefined, { numeric: true })),
         counterEarnings: [...(counterTotalsByBucket.get(formatSlotLabel(bucket.slot)) ?? new Map<string, number>())]
           .map(([heading, total]) => ({ heading, total }))
           .sort((left, right) => right.total - left.total),
@@ -1334,6 +1334,20 @@ export function AppShell() {
               </button>
             ))}
           </div>
+
+          {activeMode === "service" && posScreen === "catalog" && selectedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setPosScreen("cart")}
+              className="mt-3 w-full rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-lg shadow-emerald-500/20"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
+                <span className="text-base">View Cart — {formatCurrency(total)}</span>
+                <span>›</span>
+              </div>
+            </button>
+          )}
         </section>
 
         {activeMode === "simple" ? (
@@ -1431,17 +1445,7 @@ export function AppShell() {
                     </div>
                   ))}
 
-                  <button
-                    type="button"
-                    onClick={() => setPosScreen("cart")}
-                    className="fixed bottom-24 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[1.5rem] bg-emerald-400 px-5 py-4 text-left font-semibold text-emerald-950 shadow-2xl shadow-emerald-500/20"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="rounded-full bg-white/20 px-3 py-1 text-sm">{selectedCount} items</span>
-                      <span className="text-base">View Cart — {formatCurrency(total)}</span>
-                      <span>›</span>
-                    </div>
-                  </button>
+
                 </>
               ) : null}
 
@@ -1696,10 +1700,10 @@ export function AppShell() {
     }
 
     const scale = 1.5;
-    const fontSize = 12;
-    const itemFontSize = 15;
-    const lineHeight = 17;
-    const itemLineHeight = 21;
+    const fontSize = 15;
+    const itemFontSize = 19;
+    const lineHeight = 20;
+    const itemLineHeight = 25;
     const padding = 16;
     const fontFamily = '"Courier New", Courier, monospace';
     const defaultFont = `bold ${fontSize}px ${fontFamily}`;
