@@ -266,6 +266,7 @@ export function AppShell() {
   const [winnerDate, setWinnerDate] = useState(getLocalDateString());
   const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
   const [winnerRecords, setWinnerRecords] = useState<Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }>>([]);
+  const [winnerSortOrder, setWinnerSortOrder] = useState<"asc" | "desc">("desc");
   const [winnerLoading, setWinnerLoading] = useState(false);
   const [winnerMessage, setWinnerMessage] = useState<string | null>(null);
   const [codeSelectionOpen, setCodeSelectionOpen] = useState<"andar" | "bahar" | "result" | null>(null);
@@ -394,6 +395,12 @@ export function AppShell() {
 
   const counterAdminUsers = users.filter((user) => user.role === "COUNTER_ADMIN");
   const activeCounterAdminUsers = counterAdminUsers;
+
+  const sortedWinnerRecords = [...winnerRecords].sort((a, b) => {
+    const indexA = parseInt(a.slotId.split("-")[1], 10) || 0;
+    const indexB = parseInt(b.slotId.split("-")[1], 10) || 0;
+    return winnerSortOrder === "asc" ? indexA - indexB : indexB - indexA;
+  });
 
   async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2320,13 +2327,18 @@ export function AppShell() {
                     <div className="text-sm font-semibold text-white">Winner Deductions</div>
                     <div className="text-xs text-slate-400">Saved deductions for the selected date.</div>
                   </div>
-                  <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{winnerRecords.length} items</div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setWinnerSortOrder(prev => prev === "desc" ? "asc" : "desc")} className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300 hover:bg-slate-900 transition">
+                      Time {winnerSortOrder === "desc" ? "↓" : "↑"}
+                    </button>
+                    <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{winnerRecords.length} items</div>
+                  </div>
                 </div>
                 <div className="mt-3 space-y-2">
                   {winnerRecords.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No winner deductions saved yet.</div>
                   ) : (
-                    winnerRecords.map((winner) => (
+                    sortedWinnerRecords.map((winner) => (
                       <div key={winner.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm">
                         <div>
                           <div className="font-semibold text-white">{winner.counterHeading}</div>
@@ -2424,14 +2436,19 @@ export function AppShell() {
                     <div className="text-sm font-semibold text-white">Winner Deductions</div>
                     <div className="text-xs text-slate-400">Deductions saved for {heading} on {salesDate}.</div>
                   </div>
-                  <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{winnerRecords.length} items</div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setWinnerSortOrder(prev => prev === "desc" ? "asc" : "desc")} className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300 hover:bg-slate-900 transition">
+                      Time {winnerSortOrder === "desc" ? "↓" : "↑"}
+                    </button>
+                    <div className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300">{winnerRecords.length} items</div>
+                  </div>
                 </div>
 
                 <div className="mt-4 space-y-2">
                   {winnerRecords.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No winner deductions saved for this counter on the selected date.</div>
                   ) : (
-                    winnerRecords.map((winner) => (
+                    sortedWinnerRecords.map((winner) => (
                       <div key={winner.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm">
                         <div>
                           <div className="font-semibold text-white">{winner.slotLabel}</div>
