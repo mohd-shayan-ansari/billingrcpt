@@ -948,7 +948,7 @@ export function AppShell() {
 
   async function submitReceipt() {
     if (isLocked) {
-      setMessage("Receipt generation is locked for the last 2 minutes of the slot.");
+      setMessage("Receipt generation is locked for the last 1 minute of the slot.");
       return;
     }
     setMessage(null);
@@ -957,7 +957,7 @@ export function AppShell() {
 
   async function saveAndShare() {
     if (isLocked) {
-      setMessage("Receipt generation is locked for the last 2 minutes of the slot.");
+      setMessage("Receipt generation is locked for the last 1 minute of the slot.");
       return;
     }
     setMessage(null);
@@ -1314,7 +1314,7 @@ export function AppShell() {
               <div>
                 <p className="font-semibold text-red-300">Locking Period Active</p>
                 <p className="mt-0.5 text-sm text-red-400/80">
-                  Receipt generation is paused for the <strong className="text-red-300">last 2 minutes</strong> of this time slot. It will automatically unlock at the start of the next slot.
+                  Receipt generation is paused for the <strong className="text-red-300">last 1 minute</strong> of this time slot. It will automatically unlock at the start of the next slot.
                 </p>
               </div>
             </div>
@@ -1597,7 +1597,7 @@ export function AppShell() {
 
   async function saveFromQuantities(autoDownload = true) {
     if (isLocked) {
-      setMessage("Receipt generation is locked for the last 2 minutes of the slot.");
+      setMessage("Receipt generation is locked for the last 1 minute of the slot.");
       return;
     }
     setReceiptActionLoading(autoDownload ? "charge" : "save");

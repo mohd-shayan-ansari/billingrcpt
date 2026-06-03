@@ -193,9 +193,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Enforce 120-second slot locking rule
+  // Enforce 60-second slot locking rule
   if (isReceiptGenerationLocked()) {
-    return NextResponse.json({ error: "Receipt generation is locked for the last 2 minutes of the slot." }, { status: 403 });
+    return NextResponse.json({ error: "Receipt generation is locked for the last 1 minute of the slot." }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);

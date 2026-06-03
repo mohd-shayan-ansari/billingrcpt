@@ -53,8 +53,8 @@ export function getSecondsUntilNextSlot(now: Date = new Date()) {
 
 /**
  * Returns true if receipt generation should be blocked.
- * The lock activates exactly 120 seconds before the upcoming slot ends.
+ * The lock activates exactly 60 seconds before the upcoming slot ends.
  */
 export function isReceiptGenerationLocked(now: Date = new Date()) {
-  return getSecondsUntilNextSlot(now) <= 120;
+  return getSecondsUntilNextSlot(now) <= 60;
 }
