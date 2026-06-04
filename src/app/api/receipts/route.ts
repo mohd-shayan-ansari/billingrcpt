@@ -119,7 +119,7 @@ export async function GET(request: Request) {
   const like = `%${search}%`;
   let whereClause: any;
 
-  const date = url.searchParams.get("date")?.trim() ?? "";
+  const date = url.searchParams.get("date")?.trim();
 
   const searchWhere = search
     ? Prisma.sql`(
@@ -134,8 +134,15 @@ export async function GET(request: Request) {
     ? Prisma.sql`1=1`
     : Prisma.sql`r."adminId" = ${session.id}`;
 
-  const dateWhere = date
-    ? Prisma.sql`AND TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') = ${date}`
+  const getLocalDateStringIST = () => {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  };
+
+  // If no date and no search is provided, default to today's date in IST
+  const effectiveDate = date || (!search ? getLocalDateStringIST() : "");
+
+  const dateWhere = effectiveDate
+    ? Prisma.sql`AND TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') = ${effectiveDate}`
     : Prisma.empty;
 
   if (search) {
@@ -144,7 +151,7 @@ export async function GET(request: Request) {
     whereClause = Prisma.sql`WHERE ${baseWhere} ${dateWhere}`;
   }
 
-  const limitClause = date ? Prisma.empty : Prisma.sql`LIMIT 100`;
+  const limitClause = effectiveDate ? Prisma.empty : Prisma.sql`LIMIT 500`;
 
   const receipts = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     SELECT
