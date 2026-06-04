@@ -512,7 +512,7 @@ export function AppShell() {
 
         const [ratesResponse, receiptsResponse, usersResponse] = await Promise.all([
           fetch("/api/rates", { cache: "no-store" }),
-          fetch("/api/receipts", { cache: "no-store" }),
+          fetch(`/api/receipts?date=${encodeURIComponent(salesDate)}`, { cache: "no-store" }),
           fetch("/api/admin/users", { cache: "no-store" }),
         ]);
 
@@ -720,8 +720,8 @@ export function AppShell() {
     return [...pendingReceipts, ...markedServerReceipts].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
   }
 
-  async function refreshReceipts(nextSearch = search) {
-    const response = await fetch(`/api/receipts?search=${encodeURIComponent(nextSearch)}`, { cache: "no-store" });
+  async function refreshReceipts(nextSearch = search, dateParam = salesDate) {
+    const response = await fetch(`/api/receipts?search=${encodeURIComponent(nextSearch)}&date=${encodeURIComponent(dateParam)}`, { cache: "no-store" });
     if (!response.ok) {
       // Silently ignore failures in background polling — a truly expired session
       // will be caught when the user next performs an action.
@@ -2592,12 +2592,20 @@ export function AppShell() {
       {currentPage === "receipts" && (
         <GlassCard className="max-w-5xl mx-auto" title="All Receipts" subtitle="Every receipt with open and download actions.">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <input
-              value={salesReceiptSearch}
-              onChange={(event) => setSalesReceiptSearch(event.target.value)}
-              placeholder="Search by receipt no, item, or admin"
-              className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none sm:max-w-md"
-            />
+            <div className="flex w-full items-center gap-3 sm:max-w-md">
+              <input
+                value={salesReceiptSearch}
+                onChange={(event) => setSalesReceiptSearch(event.target.value)}
+                placeholder="Search by receipt no, item, or admin"
+                className="flex-1 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none min-w-0"
+              />
+              <input
+                type="date"
+                value={salesDate}
+                onChange={(e) => setSalesDate(e.target.value)}
+                className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-amber-300/60"
+              />
+            </div>
             <button
               type="button"
               onClick={() => setCurrentPage("settings")}

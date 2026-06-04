@@ -119,33 +119,32 @@ export async function GET(request: Request) {
   const like = `%${search}%`;
   let whereClause: any;
 
-  // Build WHERE clause based on role and search filter
-  if (session.role === Role.MASTER_ADMIN) {
-    // Master admin sees all receipts; apply search filter only if provided
-    if (search) {
-      whereClause = Prisma.sql`WHERE (
+  const date = url.searchParams.get("date")?.trim() ?? "";
+
+  const searchWhere = search
+    ? Prisma.sql`(
         r."receiptNumber" LIKE ${like}
         OR COALESCE(r.heading, '') LIKE ${like}
         OR a.name LIKE ${like}
         OR a.username LIKE ${like}
-      )`;
-    } else {
-      // Master admin sees all - use 1=1 to keep syntax valid
-      whereClause = Prisma.sql`WHERE 1=1`;
-    }
+      )`
+    : Prisma.empty;
+
+  const baseWhere = session.role === Role.MASTER_ADMIN
+    ? Prisma.sql`1=1`
+    : Prisma.sql`r."adminId" = ${session.id}`;
+
+  const dateWhere = date
+    ? Prisma.sql`AND TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') = ${date}`
+    : Prisma.empty;
+
+  if (search) {
+    whereClause = Prisma.sql`WHERE ${baseWhere} AND ${searchWhere} ${dateWhere}`;
   } else {
-    // Counter admin sees only their own receipts
-    if (search) {
-      whereClause = Prisma.sql`WHERE r."adminId" = ${session.id} AND (
-        r."receiptNumber" LIKE ${like}
-        OR COALESCE(r.heading, '') LIKE ${like}
-        OR a.name LIKE ${like}
-        OR a.username LIKE ${like}
-      )`;
-    } else {
-      whereClause = Prisma.sql`WHERE r."adminId" = ${session.id}`;
-    }
+    whereClause = Prisma.sql`WHERE ${baseWhere} ${dateWhere}`;
   }
+
+  const limitClause = date ? Prisma.empty : Prisma.sql`LIMIT 100`;
 
   const receipts = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     SELECT
@@ -178,7 +177,7 @@ export async function GET(request: Request) {
     JOIN "User" a ON a.id = r."adminId"
     ${whereClause}
     ORDER BY r.timestamp DESC
-    LIMIT 100
+    ${limitClause}
   `);
 
   const normalizedReceipts = receipts.map(mapReceiptRow);
