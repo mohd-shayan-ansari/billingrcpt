@@ -60,7 +60,7 @@ async function fetchReceiptByNumber(receiptNumber: string) {
     SELECT
       r.id,
       r."receiptNumber",
-      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
+      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
       r.heading,
       r.timestamp,
       r."clientReceiptId",
@@ -142,7 +142,7 @@ export async function GET(request: Request) {
   const effectiveDate = date || (!search ? getLocalDateStringIST() : "");
 
   const dateWhere = effectiveDate
-    ? Prisma.sql`AND TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') = ${effectiveDate}`
+    ? Prisma.sql`AND TO_CHAR(DATE(r.timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') = ${effectiveDate}`
     : Prisma.empty;
 
   if (search) {
@@ -157,7 +157,7 @@ export async function GET(request: Request) {
     SELECT
       r.id,
       r."receiptNumber",
-      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
+      TO_CHAR(DATE(r.timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS local_date,
       r.heading,
       r.timestamp,
       r."clientReceiptId",
