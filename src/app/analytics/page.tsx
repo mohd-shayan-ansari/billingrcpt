@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getSessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui/cards";
@@ -229,9 +228,6 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         </div>
         <div className="flex items-center gap-3">
           <DatePicker defaultValue={reportDate} />
-          <Link href="/" className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20 text-center">
-            Back to App
-          </Link>
         </div>
       </div>
 
