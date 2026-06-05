@@ -74,3 +74,15 @@ model WinnerDeduction {
   @@index([date, slotId])
   @@index([date, counterHeading])
 }
+
+model WinningResult {
+  id        String   @id @default(uuid())
+  date      String
+  slotId    String
+  slotLabel String
+  number    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([date, slotId])
+}

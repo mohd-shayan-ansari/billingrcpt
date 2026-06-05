@@ -241,6 +241,7 @@ function receiptStatusLabel(receipt: ReceiptRecord) {
 export function AppShell() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [rates, setRates] = useState<RateMap>(initialRates);
@@ -265,10 +266,14 @@ export function AppShell() {
   const [currentSalesSlotId, setCurrentSalesSlotId] = useState(() => getCurrentSalesSlotId());
   const [winnerDate, setWinnerDate] = useState(getLocalDateString());
   const [winnerForm, setWinnerForm] = useState({ slotId: getCurrentSalesSlotId(), counterHeading: "", amount: "" });
-  const [winnerRecords, setWinnerRecords] = useState<Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number }>>([]);
+  const [winnerRecords, setWinnerRecords] = useState<Array<{ id: string; date: string; slotId: string; slotLabel: string; counterHeading: string; amount: number; ticketNumber?: string | null }>>([]);
   const [winnerSortOrder, setWinnerSortOrder] = useState<"asc" | "desc">("desc");
   const [winnerLoading, setWinnerLoading] = useState(false);
   const [winnerMessage, setWinnerMessage] = useState<string | null>(null);
+  
+  const [winningResultForm, setWinningResultForm] = useState({ slotId: getCurrentSalesSlotId(), ticketNumber: "" });
+  const [winningResultLoading, setWinningResultLoading] = useState(false);
+  const [winningResultMessage, setWinningResultMessage] = useState<string | null>(null);
   const [codeSelectionOpen, setCodeSelectionOpen] = useState<"andar" | "bahar" | "result" | null>(null);
   const [codeQuantities, setCodeQuantities] = useState<Record<string, Record<string, number>>>({ andar: {}, bahar: {}, result: {} });
   const [codeQuantityDrafts, setCodeQuantityDrafts] = useState<Record<string, Record<string, string>>>({ andar: {}, bahar: {}, result: {} });
@@ -402,6 +407,48 @@ export function AppShell() {
     return winnerSortOrder === "asc" ? indexA - indexB : indexB - indexA;
   });
 
+  async function handleCreateWinningResult(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWinningResultMessage(null);
+
+    const slot = getSalesSlotById(winningResultForm.slotId);
+    if (!slot) {
+      setWinningResultMessage("Select a valid time slot.");
+      return;
+    }
+    if (!winningResultForm.ticketNumber || winningResultForm.ticketNumber.length !== 2) {
+      setWinningResultMessage("Enter a valid 2-digit ticket number.");
+      return;
+    }
+
+    setWinningResultLoading(true);
+    try {
+      const response = await fetch("/api/winning-results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: winnerDate,
+          slotId: slot.id,
+          slotLabel: formatSlotLabel(slot),
+          number: winningResultForm.ticketNumber.trim(),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setWinningResultMessage(data.error ?? "Failed to save winning result.");
+        return;
+      }
+
+      setWinningResultForm(current => ({ ...current, ticketNumber: "" }));
+      setWinningResultMessage("Winning result saved successfully.");
+    } catch (error) {
+      setWinningResultMessage(error instanceof Error ? error.message : "Failed to save winning result.");
+    } finally {
+      setWinningResultLoading(false);
+    }
+  }
+
   async function handleCreateWinner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setWinnerMessage(null);
@@ -500,6 +547,27 @@ export function AppShell() {
   }, [counterAdminUsers, winnerForm.counterHeading]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedReceipts = window.localStorage.getItem("billinglottery.receipts_cache");
+        if (cachedReceipts) setReceipts(JSON.parse(cachedReceipts));
+
+        const cachedSales = window.localStorage.getItem("billinglottery.sales_cache");
+        if (cachedSales) setSalesData(JSON.parse(cachedSales));
+
+        const cachedStats = window.localStorage.getItem("billinglottery.stats_cache");
+        if (cachedStats) {
+          const parsed = JSON.parse(cachedStats);
+          setTodayReceiptsCount(parsed.todayReceiptsCount || 0);
+          setTodayRevenue(parsed.todayRevenue || 0);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     void (async () => {
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
@@ -596,6 +664,13 @@ export function AppShell() {
       const stats = await statsResp.json();
       setTodayRevenue(Number(stats.grossTotal ?? 0));
       setTodayReceiptsCount(Number(stats.receiptCount ?? 0));
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("billinglottery.stats_cache", JSON.stringify({
+          todayRevenue: Number(stats.grossTotal ?? 0),
+          todayReceiptsCount: Number(stats.receiptCount ?? 0)
+        }));
+      }
     } catch {
       // ignore background refresh failures
     }
@@ -625,6 +700,10 @@ export function AppShell() {
           const data = await salesResponse.json();
           setSalesData(data.salesData || []);
           setGrandTotal(data.grandTotal || 0);
+
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("billinglottery.sales_cache", JSON.stringify(data.salesData || []));
+          }
         }
       }
     } catch (error) {
@@ -729,7 +808,12 @@ export function AppShell() {
     }
 
     const data = (await response.json()) as { receipts: ReceiptRecord[] };
-    setReceipts(mergeReceiptsWithPending(data.receipts));
+    const merged = mergeReceiptsWithPending(data.receipts);
+    setReceipts(merged);
+
+    if (typeof window !== "undefined" && !nextSearch) {
+      window.localStorage.setItem("billinglottery.receipts_cache", JSON.stringify(merged));
+    }
   }
 
   async function syncPendingReceipt(draft: PendingReceiptDraft): Promise<ReceiptRecord | null> {
@@ -905,6 +989,19 @@ export function AppShell() {
     return () => window.clearInterval(interval);
   }, []);
 
+  const manualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await Promise.all([
+        refreshReceipts(search),
+        refreshTodayStats(),
+        currentPage === "sales" ? refreshSalesTab(false) : Promise.resolve(),
+      ]);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -913,25 +1010,15 @@ export function AppShell() {
     }
 
     const refreshQuietly = async () => {
-      await Promise.all([
-        refreshReceipts(search),
-        refreshTodayStats(),
-        currentPage === "sales" ? refreshSalesTab(false) : Promise.resolve(),
-      ]);
+      await manualSync();
     };
 
     void refreshQuietly();
-    const timer = window.setInterval(() => {
-      if (active) {
-        void refreshQuietly();
-      }
-    }, 2000);
 
     return () => {
       active = false;
-      window.clearInterval(timer);
     };
-  }, [currentPage, salesDate, search, session, winnerDate]);
+  }, [session]);
 
   useEffect(() => {
     let active = true;
@@ -1328,6 +1415,27 @@ export function AppShell() {
           </div>
         )}
 
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white">Dashboard</h2>
+          <button 
+            type="button"
+            onClick={() => void manualSync()}
+            disabled={isSyncing}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-white/5 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSyncing ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
+            {isSyncing ? "Syncing..." : "Sync Now"}
+          </button>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="Today Receipts" value={String(todayReceiptCountValue)} tone="slate" />
           <StatTile label="Today Revenue" value={formatCurrency(todayTotal)} tone="emerald" />
@@ -1340,6 +1448,7 @@ export function AppShell() {
             <div className="mt-4 grid gap-2 rounded-3xl border border-white/10 bg-slate-950/95 p-2 text-sm text-white">
               <button onClick={() => { setCurrentPage("rates"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Change Rates</button>
               <button onClick={() => { setCurrentPage("sales"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Reports</button>
+              <a href="/analytics" className="block rounded-2xl px-4 py-3 text-left hover:bg-white/5">Full Analytics</a>
               <button onClick={() => { setCurrentPage("admins"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Counter Admins</button>
               <button onClick={() => { setCurrentPage("update-password"); setMenuOpen(false); }} className="rounded-2xl px-4 py-3 text-left hover:bg-white/5">Update Password</button>
             </div>
@@ -2231,11 +2340,57 @@ export function AppShell() {
 
           {salesView === "summary" && session.role === "MASTER_ADMIN" && (
             <>
+              <form onSubmit={handleCreateWinningResult} className="mb-6 space-y-4 rounded-[1.4rem] border border-amber-400/20 bg-amber-400/5 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-200">Set Winning Ticket Number</div>
+                    <div className="text-xs text-slate-400">Set the 2-digit winning ticket number for a specific time slot.</div>
+                  </div>
+                  <input
+                    type="date"
+                    value={winnerDate}
+                    onChange={(event) => setWinnerDate(event.target.value)}
+                    className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none"
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <select
+                    value={winningResultForm.slotId}
+                    onChange={(event) => setWinningResultForm((current) => ({ ...current, slotId: event.target.value }))}
+                    className="rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
+                  >
+                    {RESOLVED_SALES_SLOTS.map((slot) => (
+                      <option key={slot.id} value={slot.id}>{formatSlotLabel(slot)}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={winningResultForm.ticketNumber}
+                    onChange={(event) => {
+                      setWinningResultForm((current) => ({ ...current, ticketNumber: event.target.value.replace(/\D/g, "") }));
+                    }}
+                    placeholder="2-Digit Winning Ticket No"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={winningResultLoading || winningResultForm.ticketNumber.length !== 2}
+                    className="rounded-2xl bg-amber-400 px-6 py-3 font-semibold text-amber-950 transition hover:bg-amber-300 disabled:opacity-60"
+                  >
+                    {winningResultLoading ? "Saving..." : "Save Winning Number"}
+                  </button>
+                </div>
+                {winningResultMessage && (
+                  <div className="text-sm font-medium text-amber-200">{winningResultMessage}</div>
+                )}
+              </form>
+
               <form onSubmit={handleCreateWinner} className="mb-6 space-y-4 rounded-[1.4rem] border border-emerald-400/20 bg-emerald-400/5 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-sm font-semibold text-emerald-200">Set Winner Deduction</div>
-                    <div className="text-xs text-slate-400">Select a slot, choose a counter, and enter the amount to deduct.</div>
                   </div>
                   <input
                     type="date"
@@ -2283,7 +2438,7 @@ export function AppShell() {
                   <button
                     type="submit"
                     disabled={winnerLoading}
-                    className="rounded-2xl bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-60"
+                    className="rounded-2xl bg-emerald-400 px-6 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-60"
                   >
                     {winnerLoading ? "Saving..." : "Save Winner"}
                   </button>
@@ -2341,7 +2496,10 @@ export function AppShell() {
                     sortedWinnerRecords.map((winner) => (
                       <div key={winner.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm">
                         <div>
-                          <div className="font-semibold text-white">{winner.counterHeading}</div>
+                          <div className="font-semibold text-white">
+                            {winner.counterHeading}
+                            {winner.ticketNumber && <span className="ml-2 inline-flex items-center rounded bg-white/10 px-1.5 py-0.5 text-xs font-medium text-emerald-300">Ticket: {winner.ticketNumber}</span>}
+                          </div>
                           <div className="text-xs text-slate-400">{winner.slotLabel}</div>
                         </div>
                         <div className="font-semibold text-emerald-300">{formatCurrency(winner.amount)}</div>
