@@ -989,8 +989,8 @@ export function AppShell() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const manualSync = async () => {
-    setIsSyncing(true);
+  const manualSync = async (showSpinner = true) => {
+    if (showSpinner) setIsSyncing(true);
     try {
       await Promise.all([
         refreshReceipts(search),
@@ -998,9 +998,30 @@ export function AppShell() {
         currentPage === "sales" ? refreshSalesTab(false) : Promise.resolve(),
       ]);
     } finally {
-      setIsSyncing(false);
+      if (showSpinner) setIsSyncing(false);
     }
   };
+
+  // Auto-refresh the sales section silently from 8:55 AM to 10:45 PM
+  useEffect(() => {
+    if (!session || currentPage !== "sales") return;
+
+    const interval = window.setInterval(() => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const timeInMinutes = hours * 60 + minutes;
+
+      const startTime = 8 * 60 + 55; // 8:55 AM
+      const endTime = 22 * 60 + 45;  // 10:45 PM
+
+      if (timeInMinutes >= startTime && timeInMinutes <= endTime) {
+        void manualSync(false); // Background sync, no spinner
+      }
+    }, 30_000); // Every 30 seconds
+
+    return () => window.clearInterval(interval);
+  }, [session, currentPage, search]);
 
   useEffect(() => {
     let active = true;
@@ -1353,7 +1374,7 @@ export function AppShell() {
     }
 
     return buckets
-      .filter((bucket) => bucket.items.length > 0)
+      .filter((bucket) => salesSlotFilterId === "all" || bucket.slot.id === salesSlotFilterId)
       .map((bucket) => ({
         ...bucket,
         items: [...bucket.items].sort((left, right) => left.shortLabel.localeCompare(right.shortLabel, undefined, { numeric: true })),

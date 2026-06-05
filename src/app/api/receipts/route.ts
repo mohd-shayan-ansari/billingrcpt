@@ -31,7 +31,7 @@ function mapReceiptRow(receipt: ReceiptRow) {
     heading: receipt.heading === null ? null : String(receipt.heading),
     timestamp: String(receipt.timestamp),
     clientReceiptId: receipt.clientReceiptId === null ? null : String(receipt.clientReceiptId),
-    entries: Array.isArray(receipt.entries) ? (receipt.entries as ReceiptEntryPayload[]) : undefined,
+    entries: undefined, // Explicitly removed payload to save massive bandwidth
     syncStatus: "synced" as const,
     admin: {
       id: String(receipt.admin_id),
@@ -64,7 +64,6 @@ async function fetchReceiptByNumber(receiptNumber: string) {
       r.heading,
       r.timestamp,
       r."clientReceiptId",
-      r.entries,
       r."adminId",
       a.id AS admin_id,
       a.name AS admin_name,
@@ -161,7 +160,6 @@ export async function GET(request: Request) {
       r.heading,
       r.timestamp,
       r."clientReceiptId",
-      r.entries,
       r."adminId",
       a.id AS admin_id,
       a.name AS admin_name,
