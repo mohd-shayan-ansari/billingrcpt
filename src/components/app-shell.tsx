@@ -2335,6 +2335,23 @@ export function AppShell() {
                 onChange={(e) => setSalesDate(e.target.value)}
                 className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-white outline-none focus:border-amber-300/60"
               />
+              <button 
+                type="button"
+                onClick={() => void manualSync()}
+                disabled={isSyncing}
+                className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-white/5 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSyncing ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync"}</span>
+              </button>
             </div>
           </div>
 
