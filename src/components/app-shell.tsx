@@ -251,7 +251,7 @@ export function AppShell() {
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [adminForm, setAdminForm] = useState({ name: "", password: "" });
+  const [adminForm, setAdminForm] = useState({ password: "" });
   const [lastReceipt, setLastReceipt] = useState<ReceiptRecord | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<"dashboard" | "rates" | "admins" | "update-password" | "sales" | "settings" | "receipts">("dashboard");
@@ -2032,8 +2032,8 @@ export function AppShell() {
     event.preventDefault();
     setAdminActionLoading("create");
     setMessage(null);
-    if (!adminForm.name || !adminForm.password) {
-      setMessage("Please fill in Name and Password");
+    if (!adminForm.password) {
+      setMessage("Please enter a Password");
       setAdminActionLoading(null);
       return;
     }
@@ -2041,7 +2041,7 @@ export function AppShell() {
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: adminForm.name, password: adminForm.password }),
+        body: JSON.stringify({ password: adminForm.password }),
       });
 
       const data = await response.json().catch(() => ({ error: "Network error" }));
@@ -2061,7 +2061,7 @@ export function AppShell() {
       }
 
       setMessage(`Created ${data.user.name} (${data.user.username})`);
-      setAdminForm({ name: "", password: "" });
+      setAdminForm({ password: "" });
       await refreshUsers();
     } finally {
       setAdminActionLoading(null);
@@ -2264,9 +2264,8 @@ export function AppShell() {
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5">
             <h2 className="text-2xl font-semibold text-white">Add Counter Admin</h2>
             <form onSubmit={createCounterAdmin} className="mt-4 space-y-3 max-w-md">
-              <input value={adminForm.name} onChange={(event) => setAdminForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Name" required />
-              <input value={adminForm.password} onChange={(event) => setAdminForm((current) => ({ ...current, password: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Password" type="password" required />
-                <button disabled={adminActionLoading === "create"} className="w-full rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-60">{adminActionLoading === "create" ? "Adding..." : "Add counter admin"}</button>
+              <input value={adminForm.password} onChange={(event) => setAdminForm((current) => ({ ...current, password: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none" placeholder="Password for new counter" type="password" required />
+              <button disabled={adminActionLoading === "create"} className="w-full rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-60">{adminActionLoading === "create" ? "Adding..." : "Add counter admin"}</button>
             </form>
           </div>
 
