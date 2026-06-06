@@ -62,6 +62,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       AND r.timestamp < (CAST(${reportDate} AS DATE) + INTERVAL '2 day')
   `);
 
+  const rates = await prisma.rate.findMany();
+  const rateMap = Object.fromEntries(rates.map(r => [r.itemKey, r.rate]));
+  const anRate = rateMap.andar ?? 9;
+  const bhRate = rateMap.bahar ?? 9;
+  const rtRate = rateMap.result ?? 90;
+
   const winningResults = await prisma.winningResult.findMany({
     where: { date: reportDate },
   });
@@ -154,6 +160,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       stats.bhWonQty += bhWonQty;
       stats.rtWonQty += rtWonQty;
       stats.tickets += 1;
+      
+      const wonAmount = (anWonQty * anRate) + (bhWonQty * bhRate) + (rtWonQty * rtRate);
+      stats.winners += wonAmount;
 
       grossOverall += amt;
       totalAndar += anAmt;
@@ -165,48 +174,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     }
   }
 
-  // 2. Fetch Deductions
-  const winnerDeductions = await prisma.winnerDeduction.findMany({
-    where: { date: reportDate },
-    select: {
-      counterHeading: true,
-      amount: true,
-      slotId: true,
-      slotLabel: true,
-    },
-  });
-
   let totalDeductions = 0;
-  for (const entry of winnerDeductions) {
-    const heading = entry.counterHeading || 'Unknown Counter';
-    if (!counterMap.has(heading)) {
-      counterMap.set(heading, new Map());
+  for (const headings of counterMap.values()) {
+    for (const stats of headings.values()) {
+      totalDeductions += stats.winners;
     }
-    const slotMap = counterMap.get(heading)!;
-    
-    if (!slotMap.has(entry.slotId)) {
-      // We need to figure out minutes for sorting if it's a new slot
-      const slotDef = RESOLVED_SALES_SLOTS.find(s => s.id === entry.slotId);
-      slotMap.set(entry.slotId, {
-        slotId: entry.slotId,
-        slotLabel: entry.slotLabel || (slotDef ? formatSlotLabel(slotDef) : "Unknown"),
-        slotMinutes: slotDef ? slotDef.minutes : 0,
-        winningNumber: winningResultMap.get(entry.slotId) || null,
-        sale: 0,
-        winners: 0,
-        anAmount: 0,
-        bhAmount: 0,
-        rtAmount: 0,
-        anWonQty: 0,
-        bhWonQty: 0,
-        rtWonQty: 0,
-        tickets: 0,
-      });
-    }
-
-    const stats = slotMap.get(entry.slotId)!;
-    stats.winners += entry.amount;
-    totalDeductions += entry.amount;
   }
 
   // 3. Prepare View Data
@@ -241,7 +213,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <div className="text-3xl font-bold text-white">{formatCurrency(grossOverall)}</div>
         </GlassCard>
         <GlassCard className="!p-5">
-          <div className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">Total Deductions</div>
+          <div className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">Total Won Prizes</div>
           <div className="text-3xl font-bold text-red-400">{formatCurrency(totalDeductions)}</div>
         </GlassCard>
         <GlassCard className="!p-5">
@@ -333,7 +305,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
         {counterHeadings.length === 0 && (
           <div className="flex h-40 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400">
-            No sales or deductions found for {reportDate}.
+            No sales or won prizes found for {reportDate}.
           </div>
         )}
       </div>
