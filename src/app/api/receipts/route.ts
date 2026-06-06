@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
+import crypto from "crypto";
 import { getSessionFromRequest } from "@/lib/auth";
 import { isReceiptGenerationLocked } from "@/lib/time";
 import { prisma } from "@/lib/prisma";
