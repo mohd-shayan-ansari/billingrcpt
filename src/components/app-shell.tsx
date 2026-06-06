@@ -877,6 +877,11 @@ export function AppShell() {
   }
 
   function queueLocalReceiptAndSync(params: { headingValue: string; draftEntries: ReceiptEntryDraft[]; autoDownload: boolean }) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setMessage("Cannot create receipt. No internet connection.");
+      return null;
+    }
+
     const snapshotEntries = buildReceiptLineSnapshots(params.draftEntries);
     if (snapshotEntries.length === 0) {
       setMessage("Please select at least one code with quantity");
