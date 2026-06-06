@@ -56,5 +56,28 @@ export function getSecondsUntilNextSlot(now: Date = new Date()) {
  * The lock activates exactly 60 seconds before the upcoming slot ends.
  */
 export function isReceiptGenerationLocked(now: Date = new Date()) {
-  return getSecondsUntilNextSlot(now) <= 60;
+  const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+
+  for (const slot of RESOLVED_SALES_SLOTS) {
+    const slotSeconds = slot.minutes * 60;
+    const diff = slotSeconds - currentSeconds;
+    
+    if (diff > -60 && diff <= 60) {
+      return true;
+    }
+  }
+
+  const firstSlotNextDaySeconds = RESOLVED_SALES_SLOTS[0].minutes * 60 + 24 * 3600;
+  const diffFirst = firstSlotNextDaySeconds - currentSeconds;
+  if (diffFirst > -60 && diffFirst <= 60) {
+    return true;
+  }
+  
+  const lastSlotPrevDaySeconds = RESOLVED_SALES_SLOTS[RESOLVED_SALES_SLOTS.length - 1].minutes * 60 - 24 * 3600;
+  const diffLast = lastSlotPrevDaySeconds - currentSeconds;
+  if (diffLast > -60 && diffLast <= 60) {
+    return true;
+  }
+
+  return false;
 }

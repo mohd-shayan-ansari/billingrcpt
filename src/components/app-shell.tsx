@@ -876,8 +876,15 @@ export function AppShell() {
     }
   }
 
-  function queueLocalReceiptAndSync(params: { headingValue: string; draftEntries: ReceiptEntryDraft[]; autoDownload: boolean }) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+  async function queueLocalReceiptAndSync(params: { headingValue: string; draftEntries: ReceiptEntryDraft[]; autoDownload: boolean }) {
+    // Real connectivity check — ping the server before allowing receipt creation
+    try {
+      const ping = await fetch("/api/auth/me", { method: "GET", cache: "no-store" });
+      if (!ping.ok) {
+        setMessage("Cannot create receipt. Server is unreachable.");
+        return null;
+      }
+    } catch {
       setMessage("Cannot create receipt. No internet connection.");
       return null;
     }
@@ -1068,20 +1075,20 @@ export function AppShell() {
 
   async function submitReceipt() {
     if (isLocked) {
-      setMessage("Receipt generation is locked for the last 1 minute of the slot.");
+      setMessage("Receipt generation is locked 1 minute before and 1 minute after the slot.");
       return;
     }
     setMessage(null);
-    queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: false });
+    await queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: false });
   }
 
   async function saveAndShare() {
     if (isLocked) {
-      setMessage("Receipt generation is locked for the last 1 minute of the slot.");
+      setMessage("Receipt generation is locked 1 minute before and 1 minute after the slot.");
       return;
     }
     setMessage(null);
-    const queued = queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: true });
+    const queued = await queueLocalReceiptAndSync({ headingValue: heading, draftEntries: entries, autoDownload: true });
     if (!queued) {
       return;
     }
@@ -1739,7 +1746,7 @@ export function AppShell() {
 
   async function saveFromQuantities(autoDownload = true) {
     if (isLocked) {
-      setMessage("Receipt generation is locked for the last 1 minute of the slot.");
+      setMessage("Receipt generation is locked 1 minute before and 1 minute after the slot.");
       return;
     }
     setReceiptActionLoading(autoDownload ? "charge" : "save");
@@ -1752,7 +1759,7 @@ export function AppShell() {
         return;
       }
 
-      const queued = queueLocalReceiptAndSync({ headingValue: heading, draftEntries, autoDownload });
+      const queued = await queueLocalReceiptAndSync({ headingValue: heading, draftEntries, autoDownload });
       if (!queued) {
         return;
       }
