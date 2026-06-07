@@ -105,6 +105,7 @@ const createReceiptSchema = z.object({
       amount: z.number().int().nonnegative().optional(),
     }),
   ).min(1),
+  timestamp: z.string().datetime().optional(),
 });
 
 export async function GET(request: Request) {
@@ -322,7 +323,7 @@ export async function POST(request: Request) {
       ${receiptNumber},
       ${parsed.data.heading?.trim() || null},
       ${session.id},
-      CURRENT_TIMESTAMP,
+      ${parsed.data.timestamp ? new Date(parsed.data.timestamp) : new Date()},
       ${parsed.data.clientReceiptId ?? null},
       ${JSON.stringify(normalizedEntries)}::jsonb,
       ${andarCode || null},
@@ -361,8 +362,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Delete receipts and winner deductions together atomically
+  // Delete receipts, winner deductions, and winning results together atomically
   await prisma.$transaction([
+    prisma.winningResult.deleteMany({}),
     prisma.winnerDeduction.deleteMany({}),
     prisma.receipt.deleteMany({}),
   ]);

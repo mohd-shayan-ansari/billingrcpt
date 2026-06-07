@@ -831,6 +831,7 @@ export function AppShell() {
           clientReceiptId: draft.clientReceiptId,
           heading: draft.heading,
           entries: draft.entries,
+          timestamp: draft.timestamp,
         }),
       });
 
