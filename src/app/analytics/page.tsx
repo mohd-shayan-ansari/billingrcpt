@@ -63,11 +63,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       AND r.timestamp < (CAST(${reportDate} AS DATE) + INTERVAL '2 day')
   `);
 
-  const rates = await prisma.rate.findMany();
-  const rateMap = Object.fromEntries(rates.map(r => [r.itemKey, r.rate]));
-  const anRate = rateMap.andar ?? 9;
-  const bhRate = rateMap.bahar ?? 9;
-  const rtRate = rateMap.result ?? 90;
+
 
   const winningResults = await prisma.winningResult.findMany({
     where: { date: reportDate },
@@ -162,7 +158,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       stats.rtWonQty += rtWonQty;
       stats.tickets += 1;
       
-      const wonAmount = (anWonQty * anRate) + (bhWonQty * bhRate) + (rtWonQty * rtRate);
+      const wonAmount = (anWonQty * 100) + (bhWonQty * 500) + (rtWonQty * 10000);
       stats.winners += wonAmount;
 
       grossOverall += amt;
