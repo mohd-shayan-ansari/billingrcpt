@@ -3,7 +3,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui/cards";
 import { Prisma } from "@prisma/client";
-import { RESOLVED_SALES_SLOTS } from "@/lib/time";
+import { RESOLVED_SALES_SLOTS, getISTTimeParts } from "@/lib/time";
 import { DatePicker } from "./date-picker";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,8 @@ function getSalesSlotForMinutes(minutesSinceMidnight: number) {
 
 function getTimeSlotForTimestamp(value: string) {
   const date = new Date(value);
-  const currentMinutes = date.getHours() * 60 + date.getMinutes();
+  const { hour, minute } = getISTTimeParts(date);
+  const currentMinutes = hour * 60 + minute;
   return getSalesSlotForMinutes(currentMinutes);
 }
 

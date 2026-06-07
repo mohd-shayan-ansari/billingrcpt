@@ -213,9 +213,11 @@ function getSalesSlotForMinutes(minutesSinceMidnight: number) {
   return RESOLVED_SALES_SLOTS[RESOLVED_SALES_SLOTS.length - 1] ?? null;
 }
 
+
 function getCurrentSalesSlotId() {
   const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const { hour, minute } = getISTTimeParts(now);
+  const currentMinutes = hour * 60 + minute;
 
   return getSalesSlotForMinutes(currentMinutes)?.id ?? "all";
 }
@@ -1256,7 +1258,8 @@ export function AppShell() {
 
   function getTimeSlotIdForTimestamp(value: string) {
     const date = new Date(value);
-    const currentMinutes = date.getHours() * 60 + date.getMinutes();
+    const { hour, minute } = getISTTimeParts(date);
+    const currentMinutes = hour * 60 + minute;
 
     return getSalesSlotForMinutes(currentMinutes)?.id ?? null;
   }

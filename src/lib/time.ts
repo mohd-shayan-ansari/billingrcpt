@@ -32,12 +32,29 @@ export function resolveSalesSlots(slots: readonly string[]) {
 
 export const RESOLVED_SALES_SLOTS = resolveSalesSlots(SALES_TIME_SLOTS);
 
+export function getISTTimeParts(now: Date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  let hour = Number(parts.find(p => p.type === 'hour')?.value || 0);
+  const minute = Number(parts.find(p => p.type === 'minute')?.value || 0);
+  const second = Number(parts.find(p => p.type === 'second')?.value || 0);
+  if (hour === 24) hour = 0;
+  return { hour, minute, second };
+}
+
 /**
  * Calculates the number of seconds remaining until the NEXT time slot boundary.
  * E.g., if now is 09:13:00 and the next slot is 09:15:00, returns 120.
  */
 export function getSecondsUntilNextSlot(now: Date = new Date()) {
-  const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  const { hour, minute, second } = getISTTimeParts(now);
+  const currentSeconds = hour * 3600 + minute * 60 + second;
 
   for (const slot of RESOLVED_SALES_SLOTS) {
     const slotSeconds = slot.minutes * 60;
@@ -56,7 +73,8 @@ export function getSecondsUntilNextSlot(now: Date = new Date()) {
  * The lock activates exactly 60 seconds before the upcoming slot ends.
  */
 export function isReceiptGenerationLocked(now: Date = new Date()) {
-  const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  const { hour, minute, second } = getISTTimeParts(now);
+  const currentSeconds = hour * 3600 + minute * 60 + second;
 
   for (const slot of RESOLVED_SALES_SLOTS) {
     const slotSeconds = slot.minutes * 60;
