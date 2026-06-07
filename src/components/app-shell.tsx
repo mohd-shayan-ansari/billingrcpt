@@ -9,7 +9,7 @@ import { Share } from "@capacitor/share";
 import { SplashScreen } from "@capacitor/splash-screen";
 
 import { DEFAULT_RATES, ITEM_LABELS, RECEIPT_KEYS, ROLE_LABELS } from "@/lib/constants";
-import { RESOLVED_SALES_SLOTS, isReceiptGenerationLocked } from "@/lib/time";
+import { RESOLVED_SALES_SLOTS, isReceiptGenerationLocked, getISTTimeParts } from "@/lib/time";
 import { buildReceiptLines } from "@/lib/receipt";
 import { GlassCard, StatTile } from "@/components/ui/cards";
 import type { ReceiptLike } from "@/lib/printer/types";
